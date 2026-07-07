@@ -1,0 +1,114 @@
+/* ================================================================
+   src/styles.scss  —  styles globaux + système de thème
+   ================================================================ */
+
+/* Reset */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── Thème SOMBRE (défaut) ──────────────────────────────────── */
+html, body {
+  background: #060c1a;
+  color: #ffffff;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* ── Thème CLAIR ─────────────────────────────────────────────── */
+html.light-theme,
+html.light-theme body {
+  background: #f0f2f5 !important;
+  color: #0f172a !important;
+}
+
+/* Tous les router-outlet enfants */
+app-root, app-devices, app-alerts, app-espaces, app-dashboard {
+  display: block;
+  background: #060c1a;
+  min-height: 100vh;
+  transition: background 0.3s ease;
+}
+
+html.light-theme app-root,
+html.light-theme app-devices,
+html.light-theme app-alerts,
+html.light-theme app-espaces,
+html.light-theme app-dashboard {
+  background: #f0f2f5;
+}
+
+/* ── Scrollbar globale ──────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+html.light-theme ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+html.light-theme ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.25); }
+
+/* Inputs/selects globaux */
+input, select, textarea, button { font-family: inherit; }
+
+/* ── Chatbot : tableaux markdown (ngx-markdown génère du HTML dynamique
+      hors de l'encapsulation Angular → styles globaux obligatoires) ── */
+.msg-markdown table {
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 0.82rem;
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  width: max-content;
+  max-width: 100%;
+}
+.msg-markdown table th {
+  padding: 9px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.77rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-bottom: 2px solid rgba(255,255,255,0.16);
+  background: #242424;
+  color: #f0f0f0;
+}
+.msg-markdown table td {
+  padding: 7px 14px;
+  text-align: left;
+  white-space: nowrap;
+  color: #f0f0f0;
+  border: 1px solid rgba(255,255,255,0.07);
+  vertical-align: middle;
+}
+.msg-markdown table tbody tr { transition: background 100ms ease; }
+.msg-markdown table tbody tr:nth-child(even) { background: rgba(255,255,255,0.025); }
+.msg-markdown table tbody tr:hover { background: rgba(255,255,255,0.055); }
+.msg-markdown table tbody tr:last-child td { border-bottom: none; }
+
+html.light-theme .msg-markdown table th {
+  background: #f0f0f2;
+  border-color: rgba(0,0,0,0.10);
+  border-bottom-color: rgba(0,0,0,0.18);
+  color: #111;
+}
+html.light-theme .msg-markdown table td {
+  border-color: rgba(0,0,0,0.07);
+  color: #111;
+}
+html.light-theme .msg-markdown table tbody tr:nth-child(even) { background: rgba(0,0,0,0.025); }
+html.light-theme .msg-markdown table tbody tr:hover { background: rgba(0,0,0,0.05); }
+
+/* Angular Material */
+.mat-drawer-container, .mat-sidenav-content {
+  background: #060c1a !important;
+  color: #ffffff !important;
+  transition: background 0.3s ease;
+}
+
+html.light-theme .mat-drawer-container,
+html.light-theme .mat-sidenav-content {
+  background: #f0f2f5 !important;
+  color: #0f172a !important;
+}

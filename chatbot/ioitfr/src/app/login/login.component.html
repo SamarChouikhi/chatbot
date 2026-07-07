@@ -1,0 +1,100 @@
+<div class="login-container">
+  <div class="login-background"></div>
+  <div class="overlay"></div>
+
+  <!-- LOGO + Language switcher -->
+  <header class="login-header">
+    <img [src]="isDark ? 'assets/logo-bws-dark.png' : 'assets/logo-bws-light.png'" alt="Logo" class="brand-logo" />
+    <div class="lang-switcher">
+      <button *ngFor="let l of langs"
+              class="lang-btn"
+              [class.active]="currentLang === l"
+              (click)="switchLang(l)">
+        {{ langLabel(l) }}
+      </button>
+    </div>
+  </header>
+
+  <div class="login-content">
+
+    <!-- Section Gauche -->
+    <div class="welcome-section">
+      <h1 class="welcome-title">
+        {{ 'LOGIN.WELCOME_TITLE' | translate }}
+      </h1>
+      <p class="welcome-subtitle">
+        {{ 'LOGIN.WELCOME_SUBTITLE' | translate }}
+      </p>
+      <div class="social-links"></div>
+    </div>
+
+    <!-- Section Droite -->
+    <div class="signin-section">
+      <h2 class="signin-title">{{ 'LOGIN.SIGNIN_TITLE' | translate }}</h2>
+
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="signin-form">
+
+        <div class="form-group">
+          <label for="email">{{ 'LOGIN.EMAIL_LABEL' | translate }}</label>
+          <input
+            type="email"
+            id="email"
+            formControlName="email"
+            [class.error]="isFieldInvalid('email')"
+            [placeholder]="'LOGIN.EMAIL_PLACEHOLDER' | translate"
+            autocomplete="email"
+          />
+          <div class="error-text" *ngIf="isFieldInvalid('email')">
+            <span *ngIf="loginForm.get('email')?.hasError('required')">{{ 'LOGIN.EMAIL_REQUIRED' | translate }}</span>
+            <span *ngIf="loginForm.get('email')?.hasError('email')">{{ 'LOGIN.EMAIL_INVALID' | translate }}</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="password">{{ 'LOGIN.PASSWORD_LABEL' | translate }}</label>
+          <div class="password-wrapper">
+            <input
+              [type]="showPassword ? 'text' : 'password'"
+              id="password"
+              formControlName="password"
+              [class.error]="isFieldInvalid('password')"
+              [placeholder]="'LOGIN.PASSWORD_PLACEHOLDER' | translate"
+              autocomplete="current-password"
+            />
+            <button type="button" class="password-toggle" (click)="togglePasswordVisibility()" tabindex="-1">
+              {{ showPassword ? '👁️' : '👁️‍🗨️' }}
+            </button>
+          </div>
+          <div class="error-text" *ngIf="isFieldInvalid('password')">
+            {{ 'LOGIN.PASSWORD_REQUIRED' | translate }}
+          </div>
+        </div>
+
+        <div class="remember-me">
+          <label class="checkbox-label">
+            <input type="checkbox" formControlName="rememberMe" />
+            <span class="checkmark"></span>
+            <span>{{ 'LOGIN.REMEMBER_ME' | translate }}</span>
+          </label>
+        </div>
+
+        <div class="alert-error" *ngIf="errorMessage">{{ errorMessage }}</div>
+
+        <button type="submit" class="btn-signin" [disabled]="isLoading">
+          <span *ngIf="!isLoading">{{ 'LOGIN.SIGNIN_BTN' | translate }}</span>
+          <span *ngIf="isLoading">{{ 'LOGIN.SIGNING_IN' | translate }}</span>
+        </button>
+
+        <a routerLink="/forgot-password" class="lost-password">{{ 'LOGIN.FORGOT_PASSWORD' | translate }}</a>
+
+        <p class="terms-text">
+          {{ 'LOGIN.TERMS_PREFIX' | translate }}
+          <a href="#">{{ 'LOGIN.TERMS_LINK' | translate }}</a> |
+          <a href="#">{{ 'LOGIN.PRIVACY_LINK' | translate }}</a>
+        </p>
+
+      </form>
+    </div>
+
+  </div>
+</div>

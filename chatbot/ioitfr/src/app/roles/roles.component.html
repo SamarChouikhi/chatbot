@@ -1,0 +1,233 @@
+<div class="roles-page">
+
+  <!-- ── Header ── -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1 class="page-title">{{ 'ROLES_PAGE.TITLE' | translate }}</h1>
+      <span class="page-sub">{{ roles.length }} {{ 'COMMON.METERS' | translate }} · {{ allPermissions.length }}</span>
+    </div>
+    <div class="view-tabs">
+      <button [class.active]="activeView==='roles'" (click)="activeView='roles'">
+        <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/></svg>
+        {{ 'ROLES_PAGE.TAB_ROLES' | translate }}
+      </button>
+      <button [class.active]="activeView==='permissions'" (click)="activeView='permissions'">
+        <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" fill="currentColor"/></svg>
+        {{ 'ROLES_PAGE.TAB_PERMS' | translate }}
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Banners ── -->
+  <div class="banner banner-error" *ngIf="errorMsg">
+    {{ errorMsg }}
+    <button (click)="errorMsg=''">✕</button>
+  </div>
+  <div class="banner banner-success" *ngIf="successMsg">
+    {{ successMsg }}
+    <button (click)="successMsg=''">✕</button>
+  </div>
+
+  <!-- ── Loader ── -->
+  <div class="loading-wrap" *ngIf="loading">
+    <div class="loader-dots"><span></span><span></span><span></span></div>
+  </div>
+
+  <ng-container *ngIf="!loading">
+
+    <!-- ══════════ VIEW: ROLES ══════════ -->
+    <div class="roles-layout" *ngIf="activeView==='roles'">
+
+      <!-- Left: role list -->
+      <div class="roles-list">
+        <div class="list-header">
+          <span class="list-title">{{ 'ROLES_PAGE.SELECT_ROLE' | translate }}</span>
+          <button class="btn-add" (click)="openCreateRole()">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/></svg>
+            {{ 'ROLES_PAGE.NEW_ROLE' | translate }}
+          </button>
+        </div>
+
+        <div class="role-card"
+             *ngFor="let r of roles"
+             [class.active]="selectedRole?.id === r.id"
+             (click)="selectRole(r)">
+          <div class="role-avatar" [style.background]="roleColor(r.userName)">{{ roleIcon(r.userName) }}</div>
+          <div class="role-info">
+            <div class="role-name">{{ r.userName }}</div>
+            <div class="role-perms">{{ r.permissions.length }}</div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-icon" (click)="openEditRole(r, $event)" [title]="'COMMON.EDIT' | translate">
+              <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>
+            </button>
+            <button class="btn-icon btn-icon-danger" (click)="confirmDeleteRole(r, $event)" [title]="'COMMON.DELETE' | translate">
+              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="empty-list" *ngIf="roles.length === 0">{{ 'ROLES_PAGE.NO_ROLES' | translate }}</div>
+      </div>
+
+      <!-- Right: permissions for selected role -->
+      <div class="perms-panel" *ngIf="selectedRole; else noSelection">
+        <div class="perms-header">
+          <div class="perms-role-badge" [style.background]="roleColor(selectedRole.userName)">
+            {{ roleIcon(selectedRole.userName) }}
+          </div>
+          <div>
+            <h2 class="perms-title">{{ selectedRole.userName }}</h2>
+            <span class="perms-sub">{{ checkedIds.size }}</span>
+          </div>
+        </div>
+
+        <div class="perms-grid">
+          <label class="perm-item" *ngFor="let p of allPermissions" [class.checked]="isChecked(p.id)">
+            <input type="checkbox" [checked]="isChecked(p.id)" (change)="togglePermission(p.id)"/>
+            <div class="perm-check">
+              <svg viewBox="0 0 24 24" *ngIf="isChecked(p.id)">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/>
+              </svg>
+            </div>
+            <div class="perm-text">
+              <span class="perm-label">{{ label(p.permission) }}</span>
+              <span class="perm-key">{{ p.permission }}</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="perms-footer">
+          <button class="btn btn-primary" (click)="save()" [disabled]="saving">
+            <span class="btn-spinner" *ngIf="saving"></span>
+            <svg viewBox="0 0 24 24" *ngIf="!saving">
+              <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor"/>
+            </svg>
+            {{ 'ROLES_PAGE.SAVE_PERMS' | translate }}
+          </button>
+        </div>
+      </div>
+
+      <ng-template #noSelection>
+        <div class="no-selection">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z" fill="currentColor"/>
+          </svg>
+          <p>{{ 'ROLES_PAGE.NO_SELECTION' | translate }}</p>
+        </div>
+      </ng-template>
+    </div>
+
+    <!-- ══════════ VIEW: PERMISSIONS ══════════ -->
+    <div class="perms-view" *ngIf="activeView==='permissions'">
+      <div class="perms-view-header">
+        <span class="list-title">{{ allPermissions.length }}</span>
+        <button class="btn-add" (click)="openCreatePerm()">
+          <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/></svg>
+          {{ 'ROLES_PAGE.NEW_PERM' | translate }}
+        </button>
+      </div>
+
+      <div class="perm-table">
+        <div class="perm-table-head">
+          <span>{{ 'ROLES_PAGE.COL_KEY' | translate }}</span>
+          <span>{{ 'ROLES_PAGE.COL_LABEL' | translate }}</span>
+          <span>{{ 'ROLES_PAGE.COL_ACTIONS' | translate }}</span>
+        </div>
+        <div class="perm-table-row" *ngFor="let p of allPermissions">
+          <span class="perm-key-cell">{{ p.permission }}</span>
+          <span class="perm-label-cell">{{ label(p.permission) }}</span>
+          <div class="perm-row-actions">
+            <button class="btn-icon" (click)="openEditPerm(p)" [title]="'COMMON.EDIT' | translate">
+              <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>
+            </button>
+            <button class="btn-icon btn-icon-danger" (click)="confirmDeletePerm(p)" [title]="'COMMON.DELETE' | translate">
+              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="perm-table-empty" *ngIf="allPermissions.length === 0">
+          {{ 'ROLES_PAGE.NO_PERMS' | translate }}
+        </div>
+      </div>
+    </div>
+
+  </ng-container>
+
+  <!-- ══════════ MODAL: Create / Edit Role ══════════ -->
+  <div class="modal-overlay" *ngIf="showRoleForm" (click)="closeRoleForm()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>{{ (editingRole ? 'ROLES_PAGE.EDIT_ROLE_TITLE' : 'ROLES_PAGE.CREATE_ROLE_TITLE') | translate }}</h3>
+        <button class="btn-icon" (click)="closeRoleForm()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">{{ 'ROLES_PAGE.ROLE_NAME_LABEL' | translate }}</label>
+        <input class="form-input" type="text" [(ngModel)]="roleFormName"
+               [placeholder]="'ROLES_PAGE.ROLE_NAME_HINT' | translate"
+               (keyup.enter)="saveRole()"/>
+        <span class="form-hint">{{ 'ROLES_PAGE.ROLE_NAME_INFO' | translate }}</span>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" (click)="closeRoleForm()">{{ 'COMMON.CANCEL' | translate }}</button>
+        <button class="btn btn-primary" (click)="saveRole()"
+                [disabled]="roleFormBusy || !roleFormName.trim()">
+          <span class="btn-spinner" *ngIf="roleFormBusy"></span>
+          {{ (editingRole ? 'COMMON.UPDATE' : 'COMMON.CREATE') | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ MODAL: Create / Edit Permission ══════════ -->
+  <div class="modal-overlay" *ngIf="showPermForm" (click)="closePermForm()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>{{ (editingPerm ? 'ROLES_PAGE.EDIT_PERM_TITLE' : 'ROLES_PAGE.CREATE_PERM_TITLE') | translate }}</h3>
+        <button class="btn-icon" (click)="closePermForm()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">{{ 'ROLES_PAGE.PERM_KEY_LABEL' | translate }}</label>
+        <input class="form-input" type="text" [(ngModel)]="permFormName"
+               [placeholder]="'ROLES_PAGE.PERM_KEY_HINT' | translate"
+               (keyup.enter)="savePerm()"/>
+        <span class="form-hint">Format : VERBE_RESSOURCE (ex: MANAGE_USERS).</span>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" (click)="closePermForm()">{{ 'COMMON.CANCEL' | translate }}</button>
+        <button class="btn btn-primary" (click)="savePerm()"
+                [disabled]="permFormBusy || !permFormName.trim()">
+          <span class="btn-spinner" *ngIf="permFormBusy"></span>
+          {{ (editingPerm ? 'COMMON.UPDATE' : 'COMMON.CREATE') | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ MODAL: Delete Confirm ══════════ -->
+  <div class="modal-overlay" *ngIf="deleteTarget" (click)="cancelDelete()">
+    <div class="modal modal-sm" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h3>{{ 'ROLES_PAGE.DELETE_TITLE' | translate }}</h3>
+      </div>
+      <div class="modal-body">
+        <p class="delete-msg">
+          {{ 'COMMON.DELETE' | translate }} <strong>{{ deleteTarget.name }}</strong> ?
+        </p>
+        <p class="delete-warn">{{ 'COMMON.IRREVERSIBLE' | translate }}</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" (click)="cancelDelete()">{{ 'COMMON.CANCEL' | translate }}</button>
+        <button class="btn btn-danger" (click)="confirmDelete()" [disabled]="deleteBusy">
+          <span class="btn-spinner" *ngIf="deleteBusy"></span>
+          {{ 'COMMON.DELETE' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>

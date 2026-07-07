@@ -1,0 +1,62 @@
+# === Secrets & config locaux ===
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+.key_state.json
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+*.log
+
+# === Node / Angular ===
+node_modules/
+dist/
+.angular/
+.cache/
+
+# === Java / Maven ===
+target/
+*.class
+*.jar
+*.war
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*.DS_Store
+Thumbs.db
+
+# === Tests & coverage ===
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# === ML / AD ===
+AD/HotStart/*/model/
+AD/HotStart/*/checkpoints/
+AD/HotStart/outputs/
+AD/ColdStart/outputs/
+*.pt
+*.pkl
+*.npy
+
+# === Temp / exports ===
+tmp/
+*.tmp
+*.bak

@@ -1,0 +1,175 @@
+
+
+
+# ── Données ─────────────────────────────────────────────────────────────────
+donnees:
+
+  # Chemin par défaut — toujours surchargé par --data depuis le pipeline FastAPI
+  fichier: "energy.csv"
+
+  # Dossier de sortie : résultats CSV + graphiques
+  dossier_resultats: "outputs/energy"
+
+  # ── Filtre de période (optionnel) ─────────────────────────────────────────
+  # FORMAT : "YYYY-MM-DD"   |   Décommenter UNE seule paire pour tester.
+  # Laisser TOUT commenté → historique COMPLET analysé.
+  #
+  #  TEST 1 semaine  : date_debut: "2025-03-01"   date_fin: "2025-03-07"
+  #  TEST 1 mois     : date_debut: "2025-03-01"   date_fin: "2025-03-31"
+  #  TEST 2 mois     : date_debut: "2025-03-01"   date_fin: "2025-04-30"
+  #  TEST 3 mois     : date_debut: "2025-01-01"   date_fin: "2025-03-31"
+  #  TEST 6 mois     : date_debut: "2025-01-01"   date_fin: "2025-06-30"
+  #  TEST hiver      : date_debut: "2024-12-01"   date_fin: "2025-02-28"
+  #  TEST été        : date_debut: "2025-06-01"   date_fin: "2025-08-31"
+  #  HISTORIQUE COMPLET → tout laisser commenté (comportement par défaut)
+  #
+  #date_debut: "2025-06-01"
+  #date_fin:   "2025-08-31"
+
+
+# ── Colonnes à analyser ──────────────────────────────────────────────────────
+detection:
+
+  # Colonnes sur lesquelles détecter des anomalies.
+  # Chronos est lancé indépendamment sur chacune.
+  # La PREMIÈRE colonne est la colonne principale (affichée sur les graphiques).
+  # Anomalie globale si au moins min_features_anomalous colonnes sortent de leur intervalle.
+  # Détection bidirectionnelle : hausse ET baisse anormales sont capturées.
+  
+  colonnes:
+    - cons_en
+
+  min_features_anomalous: 1
+
+
+# ── Modèle de prédiction (Chronos) ──────────────────────────────────────────
+modele:
+
+  # Nombre d'heures d'historique passées au modèle pour chaque prédiction
+  # Recommandé données complètes : 720 (30 jours) — capture patterns hebdo + mensuels
+  historique_heures: 1440
+
+  # Nombre d'heures à prédire par fenêtre.
+  # IMPORTANT : doit être égal à pas_glissement pour une couverture 100% sans trous.
+  prediction_heures: 24
+
+  # Modèle Chronos à utiliser (identifiants HuggingFace publics)
+  #   "amazon/chronos-t5-small"  → rapide, précision correcte
+  #   "amazon/chronos-t5-base"   → bon équilibre vitesse/précision
+  #   "amazon/chronos-t5-large"  → meilleure précision, nécessite plus de VRAM  ← recommandé
+  #   "amazon/chronos-t5-huge"   → maximum (~3B params), très lent sans GPU puissant
+  # chronos-2-small  → Chronos v2 (plus précis que v1 sur séries industrielles)
+  # chronos-2-base   → meilleure précision, +40% VRAM
+  nom: "amazon/chronos-2"
+
+  # Accélérateur de calcul
+  #   "cpu"  → standard, compatible avec tous les systèmes, mais plus lent
+  #   "cuda" → recommandé si GPU NVIDIA disponible (accélération significative)
+  accelerateur: "cuda"
+
+  # Nombre d'échantillons Monte-Carlo pour estimer les quantiles.
+  # Avec contexte 720h, 50 samples donne des quantiles stables sans exploser la VRAM.
+  # chronos-2-small (~0.7 GB VRAM) + 50 samples → confortable sur 6 GB GPU
+  num_echantillons: 10
+
+
+# ── Seuil de détection ───────────────────────────────────────────────────────
+seuil:
+
+  # Stratégie de calcul du seuil d'anomalie :
+  #
+  #   "sigma"    → RECOMMANDÉ
+  #                Combine la prédiction Chronos avec les statistiques historiques
+  #                du capteur. Réduit les fausses alertes sur capteurs bruités.
+  #
+  #   "adaptive" → S'adapte automatiquement à la volatilité de chaque capteur.
+  #                Capteur instable → seuil plus large.
+  #                Capteur stable   → seuil plus strict.
+  #
+  #   "fixed"    → Seuil fixe basé uniquement sur les percentiles Chronos.
+  #                À utiliser pour la comparaison de référence uniquement.
+  # "adaptive" : avec 720h de contexte, le CV (σ/μ) est calculé sur 30 jours → très stable.
+  # L'élargissement adaptatif protège contre les transitions saisonnières (été/hiver).
+  # "sigma" (RECOMMANDÉ) : union de l'intervalle Chronos et de la bande μ±k·σ.
+  # Un point est anormal seulement s'il sort des DEUX intervalles simultanément.
+  # Beaucoup moins de faux positifs qu'adaptive sur des séries avec cycles normaux.
+  strategie: "sigma"
+
+  # Écarts-types de la bande historique. 3.5σ couvre ~99.95% d'une distribution normale.
+  # Seuls les vrais outliers (panne, dérive forte) sortent de μ±3.5σ sur 720h de contexte.
+  #   3.0 → plus sensible  |  3.5 → équilibré (recommandé)  |  4.0 → très permissif
+  k_sigma: 3.5
+
+  # Non utilisé par sigma — gardé pour basculer en adaptive si besoin.
+  alpha: 0.5
+  max_facteur_volatilite: 2.0
+
+  # Percentiles de l'intervalle de prévision Chronos.
+  # q5/q95 = intervalle à 90% : avec la bande σ en union, la combinaison est très robuste.
+  # (q10/q90 = 80% était trop étroit → 20% des points normaux sortaient par définition)
+  percentile_bas:  0.05
+  percentile_haut: 0.95
+
+
+# ── Paramètres avancés ───────────────────────────────────────────────────────
+
+avance:
+
+  # Fréquence de rééchantillonnage : "1h" = une mesure par heure
+  frequence: "1h"
+
+  # Nombre maximum d'heures consécutives à compléter si données manquantes
+  limite_completion: 3
+
+  # Pas de glissement de la fenêtre de détection (en heures)
+  # Contrôle combien de fenêtres Chronos sont lancées sur l'historique complet.
+  #
+  #   Valeur faible  → plus de fenêtres → couverture complète → plus lent
+  #   Valeur élevée  → moins de fenêtres → couverture partielle → plus rapide
+  #
+  # RÈGLE EXPERTE : pas_glissement = prediction_heures → couverture 100%, zéro trou.
+  #   24  = 1 jour   → couverture 100%, fenêtres journalières  ← RECOMMANDÉ
+  #   72  = 3 jours  → couverture 100%, moins d'appels Chronos
+  #   168 = 7 jours  → couverture 100%, très rapide
+  pas_glissement: 24
+
+  # Avec ctx=720h et pred=24h, afficher 168h (1 semaine) permet de voir le pattern
+  # hebdomadaire autour de la fenêtre de détection.
+  zoom_heures: 168
+
+  # Run continu > seuil → is_regime_change (arrêt prolongé, dérive lente)
+  # Run continu ≤ seuil → is_point_anomaly (pic, incident court)
+  # 48h avec contexte 1 mois : événements ≤ 2 jours = ponctuel, > 2 jours = régime
+  seuil_regime_heures: 48
+
+
+# ── Retraining mensuel (M1 → M12) ───────────────────────────────────────────
+retraining:
+
+  # Activer/désactiver le fine-tuning mensuel de Chronos
+  actif: true
+
+  # Nombre d'epochs de fine-tuning par cycle mensuel
+  # 3 epochs = bon compromis vitesse / adaptation  |  5 = plus précis, plus lent
+  epochs: 3
+
+  # Learning rate pour AdamW
+  taux_apprentissage: 0.0001
+
+  # Dossier de sauvegarde des checkpoints fine-tunés (un .pt par device par mois)
+  dossier_checkpoints: "outputs/energy/checkpoints"
+
+  # Fichier JSON de suivi de l'état par device (mois accumulés, maturité, etc.)
+  fichier_etat: "outputs/energy/retrain_state.json"
+
+
+# ── Prévision préventive ─────────────────────────────────────────────────────
+prevision:
+
+  # Avec 720h de contexte (30 jours), prévoir 168h (1 semaine) est fiable.
+  # Le modèle voit 4+ cycles hebdomadaires → prévision hebdomadaire robuste.
+  horizon_heures: 168
+
+  # Score de confiance minimal. 0.3 évite de sur-qualifier comme "peu fiable"
+  # les séries à forte variance normale (ex: consommation variable selon usage).
+  confiance_min: 0.3

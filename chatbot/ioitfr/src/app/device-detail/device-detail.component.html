@@ -1,0 +1,336 @@
+<div class="detail-page">
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <div class="page-header">
+    <button class="back-btn" (click)="goBack()">
+      <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      {{ 'DEVICES_PAGE.BACK' | translate }}
+    </button>
+
+    <div class="header-center" *ngIf="device">
+      <span class="type-badge" [ngClass]="'type-badge-' + device.type">
+        <svg *ngIf="device.type === 1" viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+        <svg *ngIf="device.type === 2" viewBox="0 0 24 24"><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/></svg>
+        <svg *ngIf="device.type === 3" viewBox="0 0 24 24"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/></svg>
+        <svg *ngIf="device.type === 4" viewBox="0 0 24 24"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77zM18 10c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 18v-4.5H6V18H4V5h8v13H8z"/></svg>
+        {{ getTypeLabel(device.type) }}
+      </span>
+      <h1 class="device-name">{{ device.nom || ('Device #' + device.id) }}</h1>
+    </div>
+
+    <div class="header-right">
+      <span class="status-pill" *ngIf="rtStatus" [ngClass]="'status-' + getStatusColor(rtStatus)">
+        <span class="status-dot"></span>{{ rtStatus }}
+      </span>
+      <button class="refresh-btn" (click)="load()" [title]="'DEVICES_PAGE.REFRESH' | translate">
+        <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Error ───────────────────────────────────────────────────── -->
+  <div class="error-banner" *ngIf="errorMsg">
+    <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+    {{ errorMsg }}
+    <button (click)="load()">{{ 'DEVICES_PAGE.RETRY' | translate }}</button>
+  </div>
+
+  <!-- ── Loading ─────────────────────────────────────────────────── -->
+  <div class="loading-screen" *ngIf="isLoading && !errorMsg">
+    <div class="loader-dots"><span></span><span></span><span></span></div>
+    <p>{{ 'DEVICES_PAGE.LOADING_DEVICE' | translate }}</p>
+  </div>
+
+  <!-- ── Content ─────────────────────────────────────────────────── -->
+  <div class="detail-body" *ngIf="!isLoading && device">
+
+    <!-- Row 1 : Info + Monitoring -->
+    <div class="top-grid">
+
+      <!-- Info Card -->
+      <div class="card info-card">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+          {{ 'DEVICES_PAGE.INFO_TITLE' | translate }}
+        </div>
+        <div class="info-list">
+          <div class="info-row">
+            <span class="info-label">{{ 'DEVICES_PAGE.LABEL_ID' | translate }}</span>
+            <span class="info-val mono">{{ device.id }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">{{ 'DEVICES_PAGE.LABEL_ADRESSE' | translate }}</span>
+            <span class="info-val mono">{{ device.adresse }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">{{ 'DEVICES_PAGE.LABEL_ESPACE' | translate }}</span>
+            <span class="info-val">{{ device.id_espace ?? '—' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">{{ 'DEVICES_PAGE.LABEL_IDLS' | translate }}</span>
+            <span class="info-val mono">{{ device.id_ls ?? '—' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">{{ 'DEVICES_PAGE.LABEL_UPTIME' | translate }}</span>
+            <span class="info-val">{{ device.max_uptime != null ? device.max_uptime + ' h' : '—' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">{{ 'DEVICES_PAGE.LABEL_LAST_IDX' | translate }}</span>
+            <span class="info-val mono">{{ device.last_saved_index != null ? device.last_saved_index.toFixed(2) : '—' }}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">{{ 'DEVICES_PAGE.LABEL_IS_GENERAL' | translate }}</span>
+            <span class="badge" [class.badge-blue]="device.is_general_meter == 1" [class.badge-gray]="device.is_general_meter != 1">
+              {{ device.is_general_meter == 1 ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}
+            </span>
+          </div>
+          <div class="info-row" *ngIf="device.description">
+            <span class="info-label">{{ 'DEVICES_PAGE.COL_DESC' | translate }}</span>
+            <span class="info-val text-muted">{{ device.description }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monitoring Card -->
+      <div class="card monitoring-card">
+        <div class="card-title">
+          <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+          {{ 'DEVICES_PAGE.MONITORING_TITLE' | translate }}
+          <span class="period-hint">{{ 'DEVICES_PAGE.MONITORING_PERIOD' | translate }}</span>
+        </div>
+
+        <!-- GAZ (type=3) -->
+        <ng-container *ngIf="device.type === 3">
+          <div class="kpi-grid" *ngIf="rtGaz || gazSummary; else noData">
+            <div class="kpi-card kpi-teal">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_INDEX' | translate }}</span>
+              <span class="kpi-val">{{ rtGaz?.index?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">m³</span>
+            </div>
+            <div class="kpi-card kpi-teal">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_DEBIT_MOY' | translate }}</span>
+              <span class="kpi-val">{{ rtGaz?.avgDebitPerMin?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L/min</span>
+            </div>
+            <div class="kpi-card" [ngClass]="rtGaz?.leak ? 'kpi-red' : 'kpi-green'">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_LEAK' | translate }}</span>
+              <span class="kpi-val">{{ rtGaz?.leak ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}</span>
+            </div>
+            <div class="kpi-card" [ngClass]="rtGaz?.fraud ? 'kpi-red' : 'kpi-green'">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_FRAUD' | translate }}</span>
+              <span class="kpi-val">{{ rtGaz?.fraud ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_BATTERY' | translate }}</span>
+              <span class="kpi-val">{{ rtGaz?.batteryLevel ?? '—' }}</span>
+              <span class="kpi-unit">%</span>
+            </div>
+            <div class="kpi-card kpi-teal">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_CONSO_H' | translate }}</span>
+              <span class="kpi-val">{{ gazSummary?.totalConsoH?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L</span>
+            </div>
+            <div class="kpi-card kpi-teal">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_CONSO_J' | translate }}</span>
+              <span class="kpi-val">{{ gazSummary?.totalConsoJ?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">CO₂</span>
+              <span class="kpi-val">{{ gazSummary?.co2Kg?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">kg</span>
+            </div>
+            <div class="kpi-card kpi-green">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_COST' | translate }}</span>
+              <span class="kpi-val">{{ gazSummary?.costTnd?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">TND</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- EAU (type=2) -->
+        <ng-container *ngIf="device.type === 2">
+          <div class="kpi-grid" *ngIf="rtWater || waterSummary; else noData">
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_INDEX' | translate }}</span>
+              <span class="kpi-val">{{ rtWater?.wmIndex?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">m³</span>
+            </div>
+            <div class="kpi-card" [ngClass]="rtWater?.leak ? 'kpi-red' : 'kpi-green'">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_LEAK' | translate }}</span>
+              <span class="kpi-val">{{ rtWater?.leak ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}</span>
+            </div>
+            <div class="kpi-card" [ngClass]="rtWater?.fraud ? 'kpi-red' : 'kpi-green'">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_FRAUD' | translate }}</span>
+              <span class="kpi-val">{{ rtWater?.fraud ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_BATTERY' | translate }}</span>
+              <span class="kpi-val">{{ rtWater?.batteryLevel ?? '—' }}</span>
+              <span class="kpi-unit">%</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_CONSO_J' | translate }}</span>
+              <span class="kpi-val">{{ waterSummary?.totalConsoJ?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_CONSO_M' | translate }}</span>
+              <span class="kpi-val">{{ waterSummary?.totalConsoM?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">CO₂</span>
+              <span class="kpi-val">{{ waterSummary?.co2Kg?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">kg</span>
+            </div>
+            <div class="kpi-card kpi-green">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_COST' | translate }}</span>
+              <span class="kpi-val">{{ waterSummary?.costTnd?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">TND</span>
+            </div>
+            <div class="kpi-card kpi-red">
+              <span class="kpi-label">{{ 'COMMON.ALERTS' | translate }}</span>
+              <span class="kpi-val">{{ waterSummary?.alertCount ?? 0 }}</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- ÉLECTRICITÉ (type=1) -->
+        <ng-container *ngIf="device.type === 1">
+          <div class="kpi-grid" *ngIf="rtElec || elecSummary; else noData">
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_ACTIVE_POWER' | translate }}</span>
+              <span class="kpi-val">{{ totalActivePower.toFixed(2) }}</span>
+              <span class="kpi-unit">kW</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_VOLTAGE' | translate }}</span>
+              <span class="kpi-val">{{ elecSummary?.avgVoltage?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">V</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_CURRENT' | translate }}</span>
+              <span class="kpi-val">{{ elecSummary?.avgCurrent?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">A</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_COSFI' | translate }}</span>
+              <span class="kpi-val">{{ elecSummary?.avgCosfi?.toFixed(3) ?? '—' }}</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_THD' | translate }}</span>
+              <span class="kpi-val">{{ elecSummary?.avgThd?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">%</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_BATTERY' | translate }}</span>
+              <span class="kpi-val">{{ rtElec?.batteryLevel ?? '—' }}</span>
+              <span class="kpi-unit">%</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_CONSO_J' | translate }}</span>
+              <span class="kpi-val">{{ elecSummary?.totalConsoJKwh?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">kWh</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">CO₂</span>
+              <span class="kpi-val">{{ elecSummary?.co2Kg?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">kg</span>
+            </div>
+            <div class="kpi-card kpi-green">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_COST' | translate }}</span>
+              <span class="kpi-val">{{ elecSummary?.costTnd?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">TND</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- CARBURANT (type=4) -->
+        <ng-container *ngIf="device.type === 4">
+          <div class="kpi-grid" *ngIf="fuelLatest || fuelSummary; else noData">
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_CONSUMPTION' | translate }}</span>
+              <span class="kpi-val">{{ fuelLatest?.consumptionLiters?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_LEVEL' | translate }}</span>
+              <span class="kpi-val">{{ fuelLatest?.consumptionPercentage?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">%</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_MILEAGE' | translate }}</span>
+              <span class="kpi-val">{{ fuelLatest?.mileageKm?.toFixed(0) ?? '—' }}</span>
+              <span class="kpi-unit">km</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_EFFICIENCY' | translate }}</span>
+              <span class="kpi-val">{{ fuelLatest?.efficiencyL100km?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L/100km</span>
+            </div>
+            <div class="kpi-card kpi-orange">
+              <span class="kpi-label">CO₂</span>
+              <span class="kpi-val">{{ fuelLatest?.carbonKg?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">kg</span>
+            </div>
+            <div class="kpi-card kpi-green">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_COST' | translate }}</span>
+              <span class="kpi-val">{{ fuelLatest?.costTnd?.toFixed(2) ?? '—' }}</span>
+              <span class="kpi-unit">TND</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_TOTAL_CONSO' | translate }}</span>
+              <span class="kpi-val">{{ fuelSummary?.totalConsoL?.toFixed(1) ?? '—' }}</span>
+              <span class="kpi-unit">L</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_TOTAL_DIST' | translate }}</span>
+              <span class="kpi-val">{{ fuelSummary?.totalDistanceKm?.toFixed(0) ?? '—' }}</span>
+              <span class="kpi-unit">km</span>
+            </div>
+            <div class="kpi-card kpi-blue">
+              <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_AVG_SPEED' | translate }}</span>
+              <span class="kpi-val">{{ fuelSummary?.avgSpeedKmh?.toFixed(0) ?? '—' }}</span>
+              <span class="kpi-unit">km/h</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <ng-template #noData>
+          <div class="no-data">{{ 'DEVICES_PAGE.NO_MONITORING' | translate }}</div>
+        </ng-template>
+      </div>
+    </div>
+
+    <!-- Row 2 : Alertes -->
+    <div class="card alerts-card" *ngIf="alerts.length > 0">
+      <div class="card-title">
+        <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+        {{ 'DEVICES_PAGE.RECENT_ALERTS' | translate }}
+        <span class="alert-count-badge">{{ alerts.length }}</span>
+      </div>
+      <div class="alert-list">
+        <div class="alert-row" *ngFor="let a of alerts" [ngClass]="'severity-' + getSeverityColor(a.severity)">
+          <div class="alert-dot"></div>
+          <div class="alert-body">
+            <span class="alert-type">{{ a.type }}</span>
+            <span class="alert-msg">{{ a.message }}</span>
+          </div>
+          <div class="alert-meta">
+            <span class="sev-badge sev-{{ getSeverityColor(a.severity) }}">{{ a.severity }}</span>
+            <span class="alert-date">{{ a.date | date:'dd/MM HH:mm' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card no-alert-card" *ngIf="!isLoading && alerts.length === 0">
+      <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+      {{ 'DEVICES_PAGE.NO_ACTIVE_ALERTS' | translate }}
+    </div>
+
+  </div>
+
+  <app-chatbot></app-chatbot>
+</div>

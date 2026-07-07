@@ -1,0 +1,614 @@
+<!-- ── Period selector ──────────────────────────────────────── -->
+<div class="dash-toolbar">
+  <div class="period-group">
+    <button *ngFor="let p of periods"
+            class="period-btn"
+            [class.active]="selectedPeriod === p.value"
+            (click)="changePeriod(p.value)">
+      {{ p.label }}
+    </button>
+  </div>
+  <span class="data-range">{{ dataRange }}</span>
+  <div class="loading-indicator" [class.visible]="isLoading">
+    <div class="spin-ring"></div>
+  </div>
+</div>
+
+<!-- ══ PAGE BODY ════════════════════════════════════════════ -->
+<div class="page-body">
+
+  <!-- ══ KPI CARDS ══════════════════════════════════════════ -->
+  <section class="kpi-grid">
+
+    <!-- ÉLECTRICITÉ -->
+    <div class="kpi-card kpi-elec" (click)="navigateTo('/electricity')">
+      <button class="aria-hint-btn" (click)="openAriaPopup('electricity', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="kpi-top">
+        <div class="kpi-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M7 2v11h3v9l7-12h-4l4-8z" fill="currentColor"/></svg>
+        </div>
+        <div class="kpi-header-info">
+          <span class="kpi-module">{{ 'NAV.ELECTRICITY' | translate }}</span>
+          <span class="kpi-devices">{{ elecDevices }} {{ elecDevices !== 1 ? ('COMMON.METERS' | translate) : ('COMMON.METER' | translate) }}</span>
+        </div>
+        <div class="kpi-trend" [class]="trendClass(elecTrend)">
+          <span class="trend-icon">{{ trendIcon(elecTrend) }}</span>
+          <span class="trend-val">{{ elecTrend }}</span>
+        </div>
+      </div>
+      <div class="kpi-main">
+        <span class="kpi-big">{{ fmt(elecKwh, 1) }}</span>
+        <span class="kpi-unit">kWh</span>
+      </div>
+      <p class="kpi-label">{{ 'DASHBOARD.ENERGY_CONSUMED' | translate }}</p>
+      <div class="kpi-stats">
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(elecCo2, 1) }}</span><span class="ks-unit">kgCO₂</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(elecCost, 0) }}</span><span class="ks-unit">TND</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val" [class.ks-warn]="elecAvgCosfi < 0.85">{{ elecAvgCosfi.toFixed(2) }}</span><span class="ks-unit">cosφ</span></div>
+      </div>
+      <div class="kpi-quality-row">
+        <div class="quality-bar">
+          <span class="qb-label">THD {{ elecAvgThd.toFixed(1) }}%</span>
+          <div class="qb-track">
+            <div class="qb-fill" [style.width]="(elecAvgThd > 100 ? 100 : elecAvgThd) + '%'"
+                 [class.qb-ok]="elecAvgThd <= 5" [class.qb-warn]="elecAvgThd > 5 && elecAvgThd <= 10" [class.qb-bad]="elecAvgThd > 10"></div>
+          </div>
+        </div>
+        <div class="kpi-critical-badge" *ngIf="elecCritical > 0">{{ elecCritical }} {{ elecCritical > 1 ? ('COMMON.CRITICALS' | translate) : ('COMMON.CRITICAL' | translate) }}</div>
+      </div>
+      <div class="kpi-mini-chart">
+        <canvas #elecMiniCanvas></canvas>
+        <div class="mini-empty" *ngIf="!elecChartData?.points?.length && !isLoadingElec">—</div>
+      </div>
+      <div class="kpi-footer">{{ 'DASHBOARD.ANALYSE_ELEC' | translate }}</div>
+    </div>
+
+    <!-- EAU -->
+    <div class="kpi-card kpi-water" (click)="navigateTo('/water')">
+      <button class="aria-hint-btn" (click)="openAriaPopup('water', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="kpi-top">
+        <div class="kpi-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z" fill="currentColor"/></svg>
+        </div>
+        <div class="kpi-header-info">
+          <span class="kpi-module">{{ 'NAV.WATER' | translate }}</span>
+          <span class="kpi-devices">{{ waterDevices }} {{ waterDevices !== 1 ? ('COMMON.METERS' | translate) : ('COMMON.METER' | translate) }}</span>
+        </div>
+        <div class="kpi-trend" [class]="trendClass(waterTrend)">
+          <span class="trend-icon">{{ trendIcon(waterTrend) }}</span>
+          <span class="trend-val">{{ waterTrend }}</span>
+        </div>
+      </div>
+      <div class="kpi-main">
+        <span class="kpi-big">{{ fmt(waterM3, 2) }}</span>
+        <span class="kpi-unit">m³</span>
+      </div>
+      <p class="kpi-label">{{ 'DASHBOARD.VOLUME_CONSUMED' | translate }}</p>
+      <div class="kpi-stats">
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(waterCo2, 1) }}</span><span class="ks-unit">kgCO₂</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(waterCost, 0) }}</span><span class="ks-unit">TND</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val" [class.ks-bad]="waterLeaks > 0">{{ waterLeaks }}</span><span class="ks-unit">{{ waterLeaks !== 1 ? ('COMMON.LEAKS' | translate) : ('COMMON.LEAK' | translate) }}</span></div>
+      </div>
+      <div class="kpi-quality-row">
+        <div class="anomaly-chips">
+          <span class="chip" [class.chip-bad]="waterLeaks > 0" [class.chip-ok]="waterLeaks === 0">{{ waterLeaks }} {{ waterLeaks !== 1 ? ('COMMON.LEAKS' | translate) : ('COMMON.LEAK' | translate) }}</span>
+          <span class="chip" [class.chip-bad]="waterFrauds > 0" [class.chip-ok]="waterFrauds === 0">{{ waterFrauds }} {{ waterFrauds !== 1 ? ('COMMON.FRAUDS' | translate) : ('COMMON.FRAUD' | translate) }}</span>
+        </div>
+        <div class="kpi-critical-badge" *ngIf="waterCritical > 0">{{ waterCritical }} {{ waterCritical > 1 ? ('COMMON.CRITICALS' | translate) : ('COMMON.CRITICAL' | translate) }}</div>
+      </div>
+      <div class="kpi-mini-chart">
+        <canvas #waterMiniCanvas></canvas>
+        <div class="mini-empty" *ngIf="!waterChartData?.points?.length && !isLoadingWater">—</div>
+      </div>
+      <div class="kpi-footer">{{ 'DASHBOARD.ANALYSE_WATER' | translate }}</div>
+    </div>
+
+    <!-- GAZ -->
+    <div class="kpi-card kpi-gaz" (click)="navigateTo('/gaz')">
+      <button class="aria-hint-btn" (click)="openAriaPopup('gaz', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="kpi-top">
+        <div class="kpi-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z" fill="currentColor"/></svg>
+        </div>
+        <div class="kpi-header-info">
+          <span class="kpi-module">{{ 'NAV.GAS' | translate }}</span>
+          <span class="kpi-devices">{{ gazDevices }} {{ gazDevices !== 1 ? ('COMMON.METERS' | translate) : ('COMMON.METER' | translate) }}</span>
+        </div>
+        <div class="kpi-trend" [class]="trendClass(gazTrend)">
+          <span class="trend-icon">{{ trendIcon(gazTrend) }}</span>
+          <span class="trend-val">{{ gazTrend }}</span>
+        </div>
+      </div>
+      <div class="kpi-main">
+        <span class="kpi-big">{{ fmt(gazL, 0) }}</span>
+        <span class="kpi-unit">L</span>
+      </div>
+      <p class="kpi-label">{{ 'DASHBOARD.VOLUME_CONSUMED' | translate }}</p>
+      <div class="kpi-stats">
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(gazCo2, 1) }}</span><span class="ks-unit">kgCO₂</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(gazCost, 0) }}</span><span class="ks-unit">TND</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val">{{ gazAvgDebit.toFixed(1) }}</span><span class="ks-unit">L/min</span></div>
+      </div>
+      <div class="kpi-quality-row">
+        <div class="anomaly-chips">
+          <span class="chip" [class.chip-bad]="gazLeaks > 0" [class.chip-ok]="gazLeaks === 0">{{ gazLeaks }} {{ gazLeaks !== 1 ? ('COMMON.LEAKS' | translate) : ('COMMON.LEAK' | translate) }}</span>
+        </div>
+        <div class="kpi-critical-badge" *ngIf="gazCritical > 0">{{ gazCritical }} {{ gazCritical > 1 ? ('COMMON.CRITICALS' | translate) : ('COMMON.CRITICAL' | translate) }}</div>
+      </div>
+      <div class="kpi-mini-chart">
+        <canvas #gazMiniCanvas></canvas>
+        <div class="mini-empty" *ngIf="!gazChartData?.points?.length && !isLoadingGaz">—</div>
+      </div>
+      <div class="kpi-footer">{{ 'DASHBOARD.ANALYSE_GAS' | translate }}</div>
+    </div>
+
+    <!-- CARBURANT -->
+    <div class="kpi-card kpi-fuel" (click)="navigateTo('/fuel')">
+      <button class="aria-hint-btn" (click)="openAriaPopup('fuel', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="kpi-top">
+        <div class="kpi-icon-wrap">
+          <svg viewBox="0 0 24 24"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6C4.9 3 4 3.9 4 5v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77z" fill="currentColor"/></svg>
+        </div>
+        <div class="kpi-header-info">
+          <span class="kpi-module">{{ 'NAV.FUEL' | translate }}</span>
+          <span class="kpi-devices">{{ fuelDevices }} {{ fuelDevices !== 1 ? ('COMMON.VEHICLES' | translate) : ('COMMON.VEHICLE' | translate) }}</span>
+        </div>
+        <div class="kpi-trend" [class]="trendClass(fuelTrend)">
+          <span class="trend-icon">{{ trendIcon(fuelTrend) }}</span>
+          <span class="trend-val">{{ fuelTrend }}</span>
+        </div>
+      </div>
+      <div class="kpi-main">
+        <span class="kpi-big">{{ fmt(fuelL, 0) }}</span>
+        <span class="kpi-unit">L</span>
+      </div>
+      <p class="kpi-label">{{ 'DASHBOARD.VOLUME_CONSUMED' | translate }}</p>
+      <div class="kpi-stats">
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(fuelCo2, 1) }}</span><span class="ks-unit">kgCO₂</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val">{{ fmt(fuelKm, 0) }}</span><span class="ks-unit">km</span></div>
+        <div class="kpi-stat-sep"></div>
+        <div class="kpi-stat"><span class="ks-val">{{ fuelAvgSpeed.toFixed(0) }}</span><span class="ks-unit">km/h</span></div>
+      </div>
+      <div class="kpi-quality-row">
+        <div class="kpi-critical-badge" *ngIf="fuelCritical > 0">{{ fuelCritical }} {{ fuelCritical > 1 ? ('COMMON.CRITICALS' | translate) : ('COMMON.CRITICAL' | translate) }}</div>
+      </div>
+      <div class="kpi-mini-chart">
+        <canvas #fuelMiniCanvas></canvas>
+        <div class="mini-empty" *ngIf="!fuelChartData?.points?.length && !isLoadingFuel">—</div>
+      </div>
+      <div class="kpi-footer">{{ 'DASHBOARD.ANALYSE_FUEL' | translate }}</div>
+    </div>
+
+  </section><!-- /kpi-grid -->
+
+  <!-- ══ CO₂ PANELS ═════════════════════════════════════════ -->
+  <div class="co2-grid">
+
+    <!-- ── P1.a : Courbe CO₂ horaire – Aujourd'hui ─────────── -->
+    <div class="chart-panel chart-panel--clickable" (click)="openCo2Modal()">
+      <button class="aria-hint-btn" (click)="openAriaPopup('co2-curve', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="panel-header">
+        <div class="panel-title-block">
+          <span class="panel-code">P1.a</span>
+          <h3 class="panel-title">{{ 'DASHBOARD.CO2_CURVE_TITLE' | translate }}</h3>
+        </div>
+        <span class="live-badge">
+          <span class="live-dot"></span>
+          {{ 'DASHBOARD.LIVE' | translate }} · {{ liveTime }}
+        </span>
+      </div>
+      <div class="chart-wrap" style="height: 240px; position: relative;">
+        <canvas #hourlyCo2Canvas></canvas>
+        <div class="chart-loading-overlay" [hidden]="!isLoading">
+          <div class="loading-dots"><span></span><span></span><span></span></div>
+          <p>{{ 'COMMON.LOADING' | translate }}</p>
+        </div>
+        <div class="chart-empty-overlay" [hidden]="hourlyCo2Points.length > 0 || isLoading">
+          <div class="empty-icon">
+            <svg viewBox="0 0 64 64"><path d="M8 48l14-16 10 12 14-22 10 14" stroke="rgba(255,255,255,0.15)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p>{{ 'COMMON.NO_DATA' | translate }}</p>
+        </div>
+      </div>
+      <div class="panel-click-hint">{{ 'DASHBOARD.CLICK_FULL_CHART' | translate }}</div>
+    </div>
+
+    <!-- ── P1.b : Trajectoire objectif CO₂ ─────────────────── -->
+    <div class="chart-panel">
+      <button class="aria-hint-btn" (click)="openAriaPopup('co2-trajectory', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="panel-header">
+        <div class="panel-title-block">
+          <span class="panel-code">P1.b</span>
+          <h3 class="panel-title">{{ 'DASHBOARD.CO2_TRAJECTORY_TITLE' | translate }}</h3>
+        </div>
+      </div>
+      <div class="trajectory-body">
+        <div class="traj-row">
+          <div class="traj-label-group">
+            <span class="traj-lbl">{{ 'DASHBOARD.REALISED' | translate }}</span>
+            <span class="traj-sub">({{ fmt(totalCo2, 0) }} kgCO₂)</span>
+          </div>
+          <div class="traj-bar-track">
+            <div class="traj-fill traj-realise"
+                 [style.width]="(co2RealisePct > 100 ? 100 : co2RealisePct) + '%'">
+            </div>
+          </div>
+          <span class="traj-pct" [class.over-limit]="co2RealisePct > 100">
+            {{ co2RealisePct.toFixed(0) }}%
+          </span>
+        </div>
+        <div class="traj-row">
+          <div class="traj-label-group">
+            <span class="traj-lbl">{{ 'DASHBOARD.THEORETICAL_TARGET' | translate }}</span>
+          </div>
+          <div class="traj-bar-track">
+            <div class="traj-fill traj-obj" style="width: 100%"></div>
+          </div>
+          <span class="traj-pct">100%</span>
+        </div>
+        <div class="proj-box" [class.proj-warn]="co2ProjectionWarning">
+          <span class="proj-title">{{ 'DASHBOARD.PERIOD_END_PROJECTION' | translate }} :</span>
+          <div class="proj-val-row">
+            <span class="proj-icon-warn" *ngIf="co2ProjectionWarning">⚠</span>
+            <span class="proj-num">{{ fmt(co2Projection, 0) }} kgCO₂</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── P1.c : Mix CO₂ par module ────────────────────────── -->
+    <div class="chart-panel">
+      <button class="aria-hint-btn" (click)="openAriaPopup('co2-mix', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="panel-header">
+        <div class="panel-title-block">
+          <span class="panel-code">P1.c</span>
+          <h3 class="panel-title">{{ 'DASHBOARD.CO2_MIX_TITLE' | translate }}</h3>
+        </div>
+      </div>
+      <div class="mix-body">
+        <div class="donut-mix-wrap" style="height: 200px; position: relative;">
+          <canvas #co2ChartCanvas></canvas>
+          <div class="donut-center" *ngIf="totalCo2 > 0">
+            <span class="dc-val">{{ fmt(totalCo2 / 1000, 2) }}</span>
+            <span class="dc-unit">tCO₂</span>
+          </div>
+          <div class="chart-empty-overlay" [hidden]="totalCo2 > 0 || isLoading">
+            <p>{{ 'DASHBOARD.NO_CO2_DATA' | translate }}</p>
+          </div>
+        </div>
+        <div class="mix-legend">
+          <div class="mix-leg-row" *ngFor="let item of co2Legend; trackBy: trackByIndex">
+            <span class="mix-swatch" [style.background]="item.color"></span>
+            <span class="mix-name">{{ item.name }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── P1.d : Top espaces émetteurs ─────────────────────── -->
+    <div class="chart-panel panel-emitters-card">
+      <button class="aria-hint-btn" (click)="openAriaPopup('co2-emitters', $event)" title="Analyser avec ARIA">
+        <span class="aria-hint-dot">✦</span> ARIA
+      </button>
+      <div class="panel-header">
+        <div class="panel-title-block">
+          <span class="panel-code">P1.d</span>
+          <h3 class="panel-title">{{ 'DASHBOARD.TOP_EMITTERS_TITLE' | translate }}</h3>
+        </div>
+      </div>
+      <div class="emitters-body">
+        <div class="emitter-row" *ngFor="let e of topEmitters; trackBy: trackByIndex">
+          <div class="em-left">
+            <span class="em-icon">{{ e.icon }}</span>
+            <span class="em-name">{{ e.name }}</span>
+            <span class="em-alert-badge" *ngIf="e.alertCount > 0">{{ e.alertCount }}</span>
+          </div>
+          <div class="em-bar-section">
+            <div class="em-bar-track">
+              <div class="em-bar" [style.width]="e.pct + '%'" [style.background]="e.color"></div>
+              <span class="em-kg">{{ fmt(e.co2Kg, 0) }} kg</span>
+            </div>
+          </div>
+          <div class="em-trend" [class.em-up]="!e.trendDown" [class.em-down]="e.trendDown">
+            {{ e.trendDown ? '↓' : '↑' }}{{ e.trendVal }}
+          </div>
+        </div>
+        <div class="emitters-empty" *ngIf="topEmitters.length === 0 && !isLoading">
+          <p>{{ 'COMMON.NO_DATA' | translate }}</p>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /co2-grid -->
+
+  <!-- ══ ANOMALIES IA ══════════════════════════════════════════ -->
+  <section class="ad-section">
+
+    <!-- Header -->
+    <div class="ad-header">
+      <div class="ad-title-block">
+        <span class="panel-code">AD</span>
+        <h3 class="panel-title">{{ 'DASHBOARD.AI_ANOMALIES_TITLE' | translate }} {{ selectedPeriod }} {{ 'DASHBOARD.DAYS_ABBR' | translate }}</h3>
+        <span class="ad-total-badge" *ngIf="adTotalAnomalies() > 0">{{ adTotalAnomalies() }}</span>
+      </div>
+      <div class="ad-domain-tabs">
+        <button class="ad-tab" [class.active]="adDomainFilter === null" (click)="loadAdData()">{{ 'DASHBOARD.CHART_ALL' | translate }}</button>
+        <button class="ad-tab" [class.active]="adDomainFilter === 'energy'" (click)="loadAdData('energy')">⚡ Énergie
+          <span class="ad-tab-count" *ngIf="adKpis['energy']">{{ adKpis['energy'] }}</span>
+        </button>
+        <button class="ad-tab" [class.active]="adDomainFilter === 'water'" (click)="loadAdData('water')">💧 Eau
+          <span class="ad-tab-count" *ngIf="adKpis['water']">{{ adKpis['water'] }}</span>
+        </button>
+        <button class="ad-tab" [class.active]="adDomainFilter === 'gas'" (click)="loadAdData('gas')">🔥 Gaz
+          <span class="ad-tab-count" *ngIf="adKpis['gas']">{{ adKpis['gas'] }}</span>
+        </button>
+        <button class="ad-tab" [class.active]="adDomainFilter === 'fuel'" (click)="loadAdData('fuel')">🚗 Carburant
+          <span class="ad-tab-count" *ngIf="adKpis['fuel']">{{ adKpis['fuel'] }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI counters -->
+    <div class="ad-kpi-row" *ngIf="!isLoadingAd && adTotalAnomalies() > 0">
+      <div class="ad-kpi" *ngFor="let d of adDomains" [hidden]="!(adKpis[d] > 0)">
+        <span class="ad-kpi-icon">{{ adDomainIcon(d) }}</span>
+        <span class="ad-kpi-val">{{ adKpis[d] }}</span>
+        <span class="ad-kpi-label">{{ d }}</span>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="ad-table-wrap">
+
+      <!-- Loading -->
+      <div class="ad-loading" *ngIf="isLoadingAd">
+        <div class="loader-dots"><span></span><span></span><span></span></div>
+      </div>
+
+      <!-- Empty -->
+      <div class="ad-empty" *ngIf="!isLoadingAd && adAnomalies.length === 0">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <p>Aucune anomalie détectée sur cette période.</p>
+      </div>
+
+      <!-- Grouped rows -->
+      <div class="ag-list" *ngIf="!isLoadingAd && adAnomalies.length > 0">
+
+        <!-- Column headers -->
+        <div class="ag-list-hdr">
+          <span class="ag-hdr-device">{{ 'COMMON.DEVICE_PHASE' | translate }}</span>
+          <span class="ag-hdr-score">{{ 'COMMON.SCORE' | translate }}</span>
+          <span class="ag-hdr-last">{{ 'COMMON.TIMESTAMP' | translate }}</span>
+          <span class="ag-hdr-strat">{{ 'COMMON.STRATEGY' | translate }}</span>
+          <span class="ag-hdr-evt">{{ 'DASHBOARD.EVT_ABBR' | translate }}</span>
+        </div>
+
+        <div class="ag-group"
+             *ngFor="let g of groupedAnomalies; trackBy: trackByGroup"
+             [attr.data-score]="adScoreClass(g.worst.anomaly_score)"
+             [class.ag-open]="expandedGroups.has(g.item_id)">
+
+          <!-- Summary row -->
+          <div class="ag-summary" (click)="g.count > 1 && toggleGroup(g.item_id)">
+
+            <div class="ag-device-col">
+              <span class="ad-domain-pill" [attr.data-domain]="g.domain">
+                {{ adDomainIcon(g.domain) }} {{ g.domain }}
+              </span>
+              <span class="ag-device-id mono">{{ adDeviceLabel(g.item_id) }}</span>
+            </div>
+
+            <div class="ag-score-col">
+              <div class="ag-score-track">
+                <div class="ag-score-fill" [class]="adScoreClass(g.worst.anomaly_score)"
+                     [style.width.%]="(g.worst.anomaly_score ?? 0) * 100"></div>
+              </div>
+              <span class="ag-score-pct" [class]="adScoreClass(g.worst.anomaly_score)">
+                {{ g.worst.anomaly_score != null ? (g.worst.anomaly_score * 100 | number:'1.0-0') + '%' : '—' }}
+              </span>
+            </div>
+
+            <div class="ag-last-col">
+              <span class="ag-last-ts mono">{{ adFormatTs(g.worst.data_ts) }}</span>
+              <span class="ag-worst-val mono"
+                    [class.ad-val-high]="g.worst.value != null && g.worst.q90 != null && g.worst.value > g.worst.q90"
+                    [class.ad-val-low]="g.worst.value != null && g.worst.q10 != null && g.worst.value < g.worst.q10">
+                {{ g.worst.value != null ? fmt(g.worst.value, 2) : '—' }}
+              </span>
+            </div>
+
+            <div class="ag-strat-col">
+              <span class="badge-strategy" [ngClass]="g.strategy">{{ g.strategy }}</span>
+            </div>
+
+            <div class="ag-evt-col">
+              <span class="ag-count-badge" *ngIf="g.count > 1">×{{ g.count }}</span>
+              <svg class="ag-chevron" *ngIf="g.count > 1"
+                   viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M4 6l4 4 4-4"/>
+              </svg>
+            </div>
+
+          </div><!-- /ag-summary -->
+
+          <!-- Expanded sub-events (skip worst, already shown) -->
+          <div class="ag-events" *ngIf="expandedGroups.has(g.item_id)">
+            <div class="ag-event" *ngFor="let e of g.events.slice(1)">
+              <span class="ag-ev-ts mono">{{ adFormatTs(e.data_ts) }}</span>
+              <span class="ag-ev-val mono"
+                    [class.ad-val-high]="e.value != null && e.q90 != null && e.value > e.q90"
+                    [class.ad-val-low]="e.value != null && e.q10 != null && e.value < e.q10">
+                {{ e.value != null ? fmt(e.value, 2) : '—' }}
+              </span>
+              <span class="ad-range">[{{ e.q10 != null ? fmt(e.q10, 2) : '?' }} — {{ e.q90 != null ? fmt(e.q90, 2) : '?' }}]</span>
+              <span class="ag-ev-score" [class]="adScoreClass(e.anomaly_score)">
+                {{ e.anomaly_score != null ? (e.anomaly_score * 100 | number:'1.0-0') + '%' : '—' }}
+              </span>
+            </div>
+          </div>
+
+        </div><!-- /ag-group -->
+      </div>
+    </div>
+
+    <!-- ── Risques à venir (Chronos forecast) ──────────────────── -->
+    <div class="alert-panel" *ngIf="adPredictions.length > 0 || isLoadingPredictions">
+
+      <div class="alert-panel-hdr">
+        <div class="alert-bell-wrap">
+          <svg class="alert-bell-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          <span class="alert-bell-badge" *ngIf="adPredictions.length > 0">{{ adPredictions.length }}</span>
+        </div>
+        <div class="alert-panel-info">
+          <span class="alert-panel-title">{{ 'DASHBOARD.UPCOMING_RISKS' | translate }}</span>
+          <span class="alert-panel-sub">{{ 'DASHBOARD.UPCOMING_RISKS_SUB' | translate }}</span>
+        </div>
+        <span class="alert-high-chip" *ngIf="predHighCount > 0">{{ predHighCount }} {{ 'COMMON.HIGH' | translate | uppercase }}</span>
+      </div>
+
+      <div class="alert-loading" *ngIf="isLoadingPredictions">
+        <span class="alert-loading-dot"></span>
+        <span class="alert-loading-dot"></span>
+        <span class="alert-loading-dot"></span>
+        <span class="alert-loading-text">Analyse Chronos en cours…</span>
+      </div>
+
+      <div class="alert-cards" *ngIf="!isLoadingPredictions">
+        <div class="alert-card" *ngFor="let p of adPredictions" [attr.data-sev]="p.alert_severity?.toLowerCase()">
+          <div class="alert-card-stripe">
+            <span class="alert-card-pulse" *ngIf="p.alert_severity === 'HIGH'"></span>
+          </div>
+          <span class="alert-card-domain-icon">{{ domainIcon(p.domain) }}</span>
+          <div class="alert-card-body">
+            <div class="alert-card-top">
+              <span class="alert-card-device mono">{{ p.item_id }}</span>
+              <span class="alert-card-sev" [ngClass]="predSeverityClass(p.alert_severity)">{{ p.alert_severity }}</span>
+            </div>
+            <div class="alert-card-bot">
+              <span class="alert-card-domain">{{ p.domain }}</span>
+              <span class="alert-card-when">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="11" height="11"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>
+                {{ predHorizon(p.forecast_ts) }}
+              </span>
+              <span class="alert-card-val mono" *ngIf="p.forecast_median != null">≈ {{ p.forecast_median | number:'1.1-2' }}</span>
+            </div>
+          </div>
+          <div class="alert-card-conf">
+            <div class="conf-track">
+              <div class="conf-fill" [style.width.%]="(p.confidence ?? 0) * 100"></div>
+            </div>
+            <span class="conf-pct">{{ (p.confidence ?? 0) * 100 | number:'1.0-0' }}%</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </section><!-- /ad-section -->
+
+  <!-- ══ MODAL CO₂ HORAIRE ════════════════════════════════════ -->
+  <div class="co2-modal-backdrop"
+       [class.open]="co2ModalOpen"
+       (click)="handleModalBackdrop($event)">
+    <div class="co2-modal" (click)="$event.stopPropagation()">
+
+      <!-- Header -->
+      <div class="co2-modal-header">
+        <div class="co2-modal-title-block">
+          <span class="panel-code">P1.a</span>
+          <h2 class="co2-modal-title">{{ 'DASHBOARD.CO2_CURVE_TITLE' | translate }}</h2>
+          <span class="live-badge">
+            <span class="live-dot"></span>
+            {{ 'DASHBOARD.LIVE' | translate }} · {{ liveTime }}
+          </span>
+        </div>
+        <button class="co2-modal-close" (click)="closeCo2Modal()">✕</button>
+      </div>
+
+      <!-- Filters -->
+      <div class="co2-modal-controls">
+        <span class="ctrl-label">{{ 'COMMON.SOURCE' | translate }}</span>
+        <button *ngFor="let f of modalFilters"
+                class="filter-btn"
+                [ngClass]="'fb-' + f.key"
+                [class.active]="modalActiveFilter === f.key"
+                (click)="setModalFilter(f.key)">
+          {{ f.icon }} {{ f.label | translate }}
+        </button>
+      </div>
+
+      <!-- KPI row -->
+      <div class="co2-modal-kpis">
+        <div class="co2-kpi-chip">
+          <span class="ckc-val">{{ fmt(modalKpis.total, 1) }} kg</span>
+          <span class="ckc-lbl">{{ 'DASHBOARD.TOTAL_TODAY' | translate }}</span>
+          <span class="ckc-delta" [class.delta-up]="modalKpis.trendUp" [class.delta-dn]="!modalKpis.trendUp">
+            {{ modalKpis.totalDelta }}
+          </span>
+        </div>
+        <div class="co2-kpi-chip">
+          <span class="ckc-val">{{ fmt(modalKpis.peak, 1) }} kg</span>
+          <span class="ckc-lbl">{{ 'DASHBOARD.PEAK_HOUR' | translate }}</span>
+          <span class="ckc-delta delta-neutral">à {{ modalKpis.peakHour }}</span>
+        </div>
+        <div class="co2-kpi-chip">
+          <span class="ckc-val">{{ fmt(modalKpis.avg, 1) }} kg/h</span>
+          <span class="ckc-lbl">{{ 'DASHBOARD.HOURLY_AVG' | translate }}</span>
+          <span class="ckc-delta delta-dn">↓ -3.1% {{ 'DASHBOARD.VS_YESTERDAY' | translate }}</span>
+        </div>
+        <div class="co2-kpi-chip">
+          <span class="ckc-val">{{ fmt(modalKpis.projection, 0) }} kg</span>
+          <span class="ckc-lbl">{{ 'DASHBOARD.PROJECTION_EOD' | translate }}</span>
+          <span class="ckc-delta"
+                [class.delta-up]="modalKpis.projWarn"
+                [class.delta-dn]="!modalKpis.projWarn">
+            {{ (modalKpis.projWarn ? 'DASHBOARD.PROJ_WARN' : 'DASHBOARD.PROJ_OK') | translate }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="co2-modal-chart-wrap">
+        <canvas #modalCo2Canvas></canvas>
+        <div class="chart-empty-overlay" [hidden]="hourlyCo2Points.length > 0 || isLoading">
+          <div class="empty-icon">
+            <svg viewBox="0 0 64 64"><path d="M8 48l14-16 10 12 14-22 10 14" stroke="rgba(255,255,255,0.15)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <p>{{ 'COMMON.NO_DATA' | translate }}</p>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="co2-modal-footer">
+        <span class="co2-footer-hint">{{ 'DASHBOARD.CHART_LEGEND_HINT' | translate }}</span>
+      </div>
+
+    </div>
+  </div><!-- /co2-modal-backdrop -->
+
+</div><!-- /page-body -->
+

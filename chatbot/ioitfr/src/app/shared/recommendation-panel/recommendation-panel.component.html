@@ -1,0 +1,152 @@
+<div class="reco-panel" [class.expanded]="isExpanded" [class]="'reco-panel reco-panel--' + headerClass">
+
+  <!-- ── Toggle Header ── -->
+  <button class="reco-header" (click)="toggle()" [attr.aria-expanded]="isExpanded">
+    <span class="reco-header-left">
+      <span class="reco-header-icon">{{ headerIcon }}</span>
+      <span class="reco-header-title">{{ 'RECO_PANEL.TITLE' | translate }}</span>
+      <span class="reco-header-label">{{ headerLabel }}</span>
+    </span>
+    <span class="reco-header-right">
+      <ng-container *ngIf="!isLoading && totalCount > 0">
+        <span class="reco-saving" *ngIf="totalPotentialSaving > 0">
+          💰 {{ 'RECO_PANEL.POTENTIAL_TND' | translate:{ amount: (totalPotentialSaving | number:'1.0-0') } }}
+        </span>
+        <span class="reco-badge reco-badge--critical" *ngIf="criticalCount > 0">{{ criticalCount }}</span>
+        <span class="reco-badge reco-badge--high"     *ngIf="highCount > 0">{{ highCount }}</span>
+      </ng-container>
+      <button class="reco-refresh-btn"
+              (click)="triggerRefresh($event)"
+              [disabled]="isRefreshing"
+              [title]="'RECO_PANEL.REFRESH_TOOLTIP' | translate">
+        <span *ngIf="!isRefreshing">✦ {{ 'RECO_PANEL.REFRESH_BTN' | translate }}</span>
+        <span *ngIf="isRefreshing" class="reco-refresh-loading">
+          <div class="spinner-xs"></div> LLM…
+        </span>
+      </button>
+      <svg class="reco-chevron" [class.chevron-open]="isExpanded" viewBox="0 0 24 24" width="16" height="16">
+        <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+      </svg>
+    </span>
+  </button>
+
+  <!-- ── Recommendation Cards ── -->
+  <div class="reco-body" *ngIf="isExpanded">
+
+    <!-- Loading skeleton -->
+    <div class="reco-skeleton" *ngIf="isLoading">
+      <div class="skeleton-line w80"></div>
+      <div class="skeleton-line w60"></div>
+      <div class="skeleton-line w70"></div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="reco-empty" *ngIf="!isLoading && totalCount === 0">
+      <svg viewBox="0 0 24 24" width="32" height="32">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L21 8l-9 9z" fill="currentColor"/>
+      </svg>
+      <span>{{ 'RECO_PANEL.NO_ANOMALY' | translate }}</span>
+    </div>
+
+    <!-- Cards list -->
+    <div class="reco-list" *ngIf="!isLoading && totalCount > 0">
+      <div class="reco-card"
+           [class]="'reco-card reco-card--' + priorityClass(rec.priority)"
+           *ngFor="let rec of recommendations; trackBy: trackById">
+
+        <!-- Card Header -->
+        <div class="reco-card-header">
+          <span class="reco-type-icon">{{ recTypeIcon(rec.rec_type) }}</span>
+          <div class="reco-card-meta">
+            <span class="reco-card-title">{{ rec.title }}</span>
+            <span class="reco-card-type">{{ recTypeLabel(rec.rec_type) }}</span>
+          </div>
+          <span class="reco-priority-badge" [class]="'reco-priority-badge--' + rec.priority">
+            {{ rec.priority | uppercase }}
+          </span>
+        </div>
+
+        <!-- Card Body -->
+        <div class="reco-card-body">
+          <p class="reco-description">{{ rec.description }}</p>
+
+          <!-- Metrics row -->
+          <div class="reco-metrics" *ngIf="rec.deviation_pct || rec.estimated_saving_tnd">
+            <div class="reco-metric" *ngIf="rec.deviation_pct">
+              <span class="reco-metric-val">+{{ rec.deviation_pct | number:'1.0-1' }}%</span>
+              <span class="reco-metric-lbl">{{ 'RECO_PANEL.VS_BASELINE' | translate }}</span>
+            </div>
+            <div class="reco-metric reco-metric--saving" *ngIf="rec.estimated_saving_tnd">
+              <span class="reco-metric-val">{{ rec.estimated_saving_tnd | number:'1.0-2' }} TND</span>
+              <span class="reco-metric-lbl">{{ 'RECO_PANEL.POTENTIAL_SAVING' | translate }}</span>
+            </div>
+            <div class="reco-metric reco-metric--realized" *ngIf="rec.measured_saving_tnd">
+              <span class="reco-metric-val">✓ {{ rec.measured_saving_tnd | number:'1.0-2' }} TND</span>
+              <span class="reco-metric-lbl">{{ 'RECO_PANEL.REALIZED_SAVING' | translate }}</span>
+            </div>
+          </div>
+
+          <!-- Action text -->
+          <div class="reco-action">
+            <svg viewBox="0 0 24 24" width="14" height="14">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor"/>
+            </svg>
+            <span>{{ rec.action }}</span>
+          </div>
+
+          <!-- Raisonnement IA (Chain-of-Thought) -->
+          <div class="reco-reasoning-wrap" *ngIf="rec.reasoning">
+            <button class="reco-reasoning-toggle"
+                    (click)="toggleReasoning(rec.id, $event)">
+              <span class="reco-reasoning-toggle-icon">🧠</span>
+              <span>{{ 'RECO_PANEL.REASONING' | translate }}</span>
+              <svg class="reco-reasoning-chevron"
+                   [class.open]="isReasoningExpanded(rec.id)"
+                   viewBox="0 0 24 24" width="12" height="12">
+                <path d="M7 10l5 5 5-5z" fill="currentColor"/>
+              </svg>
+            </button>
+            <div class="reco-reasoning-body" *ngIf="isReasoningExpanded(rec.id)">
+              {{ rec.reasoning }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Card Actions -->
+        <div class="reco-card-actions">
+          <button class="reco-btn reco-btn--aria"
+                  (click)="analyzeWithAria(rec, $event)"
+                  [title]="'RECO_PANEL.ARIA_TOOLTIP' | translate">
+            <span>✦</span> ARIA
+          </button>
+
+          <div class="reco-btn-group" *ngIf="!isActionLoading(rec.id)">
+            <button class="reco-btn reco-btn--accept"
+                    *ngIf="rec.status === 'pending'"
+                    (click)="accept(rec, $event)"
+                    [title]="'RECO_PANEL.ACCEPT_TOOLTIP' | translate">
+              ✓ {{ 'RECO_PANEL.ACCEPT_BTN' | translate }}
+            </button>
+            <button class="reco-btn reco-btn--done"
+                    *ngIf="rec.status === 'accepted'"
+                    (click)="markDone(rec, $event)"
+                    [title]="'RECO_PANEL.DONE_TOOLTIP' | translate">
+              ✓✓ {{ 'RECO_PANEL.DONE_BTN' | translate }}
+            </button>
+            <button class="reco-btn reco-btn--dismiss"
+                    (click)="dismiss(rec, $event)"
+                    [title]="'RECO_PANEL.DISMISS_TOOLTIP' | translate">
+              ✕
+            </button>
+          </div>
+
+          <div class="reco-action-loading" *ngIf="isActionLoading(rec.id)">
+            <div class="spinner-xs"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>

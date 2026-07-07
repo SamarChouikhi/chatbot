@@ -1,0 +1,136 @@
+<div class="rules-backdrop" (click)="close.emit()"></div>
+
+<div class="rules-panel" role="dialog" aria-modal="true" aria-label="Règles d'alerte">
+
+  <!-- En-tête ──────────────────────────────────────────────────────────── -->
+  <div class="rp-header">
+    <div class="rp-title">
+      <svg viewBox="0 0 24 24">
+        <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/>
+      </svg>
+      {{ 'SHELL.ALERT_RULES_TITLE' | translate }}
+    </div>
+    <button class="rp-close" (click)="close.emit()" aria-label="Fermer">
+      <svg viewBox="0 0 24 24">
+        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="rp-body">
+
+    <!-- Liste des règles ─────────────────────────────────────────────────── -->
+    <div class="rule-list">
+
+      <div class="rule-empty" *ngIf="(rules$ | async)?.length === 0">
+        {{ 'SHELL.ALERT_RULES_EMPTY' | translate }}
+      </div>
+
+      <ng-container *ngIf="liveMetrics$ | async as live">
+        <div
+          class="rule-row"
+          *ngFor="let r of rules$ | async"
+          [class.rule-off]="!r.enabled"
+        >
+          <!-- Toggle on/off -->
+          <label class="toggle-wrap" [title]="r.enabled ? ('SHELL.ALERT_RULES_DISABLE' | translate) : ('SHELL.ALERT_RULES_ENABLE' | translate)">
+            <input type="checkbox" [checked]="r.enabled" (change)="toggle(r)" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+
+          <!-- Infos règle + valeur live -->
+          <div class="rule-info">
+            <span class="rule-label">{{ r.label }}</span>
+            <span class="rule-expr">
+              {{ r.metric }}
+              <strong>{{ r.operator }}</strong>
+              {{ r.threshold }}{{ metricUnits[r.metric] }}
+              <span class="live-val" *ngIf="live[r.metric] != null">
+                {{ 'SHELL.ALERT_RULES_CURRENT' | translate }} <strong>{{ live[r.metric] }}{{ metricUnits[r.metric] }}</strong>
+              </span>
+            </span>
+          </div>
+
+          <!-- Badge sévérité -->
+          <span
+            class="sev-badge"
+            [style.color]="sevColors[r.severity]"
+            [style.border-color]="sevColors[r.severity] + '44'"
+          >{{ sevLabels[r.severity] }}</span>
+
+          <!-- Actions -->
+          <div class="rule-btns">
+            <button class="rule-btn btn-test"   title="Tester"    (click)="test(r)">
+              <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
+            </button>
+            <button class="rule-btn btn-edit"   title="Modifier"  (click)="openEdit(r)">
+              <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor"/></svg>
+            </button>
+            <button class="rule-btn btn-delete" title="Supprimer" (click)="remove(r)">
+              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor"/></svg>
+            </button>
+          </div>
+        </div>
+      </ng-container>
+    </div>
+
+    <!-- Formulaire ajout / édition ────────────────────────────────────────── -->
+    <div class="rule-form" *ngIf="showForm">
+      <div class="rf-title">{{ editingId ? ('SHELL.ALERT_RULES_EDIT_TITLE' | translate) : ('SHELL.ALERT_RULES_NEW_TITLE' | translate) }}</div>
+
+      <div class="rf-row">
+        <label>{{ 'SHELL.ALERT_RULES_METRIC' | translate }}</label>
+        <select [(ngModel)]="form.metric" (ngModelChange)="onMetricChange()">
+          <option *ngFor="let m of metrics" [value]="m">{{ metricLabels[m] }}</option>
+        </select>
+      </div>
+
+      <div class="rf-row">
+        <label>{{ 'SHELL.ALERT_RULES_LABEL' | translate }}</label>
+        <input type="text" [(ngModel)]="form.label" placeholder="Ex : THD élevé sur L1" />
+      </div>
+
+      <div class="rf-row rf-inline">
+        <div class="rf-sub">
+          <label>{{ 'SHELL.ALERT_RULES_OPERATOR' | translate }}</label>
+          <select [(ngModel)]="form.operator">
+            <option value=">">&gt; {{ 'SHELL.ALERT_RULES_GT' | translate }}</option>
+            <option value="<">&lt; {{ 'SHELL.ALERT_RULES_LT' | translate }}</option>
+          </select>
+        </div>
+        <div class="rf-sub">
+          <label>{{ 'SHELL.ALERT_RULES_THRESHOLD' | translate }}<span class="rf-unit" *ngIf="metricUnits[form.metric]"> ({{ metricUnits[form.metric] }})</span></label>
+          <input type="number" [(ngModel)]="form.threshold" step="0.01" min="0" />
+        </div>
+      </div>
+
+      <div class="rf-row rf-inline">
+        <div class="rf-sub">
+          <label>{{ 'COMMON.SEVERITY' | translate }}</label>
+          <select [(ngModel)]="form.severity">
+            <option *ngFor="let s of severities" [value]="s">{{ sevLabels[s] }}</option>
+          </select>
+        </div>
+        <div class="rf-sub rf-toggle-row">
+          <label>{{ 'SHELL.ALERT_RULES_ENABLED' | translate }}</label>
+          <label class="toggle-wrap">
+            <input type="checkbox" [(ngModel)]="form.enabled" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="rf-actions">
+        <button class="rf-cancel" (click)="cancelForm()">{{ 'COMMON.CANCEL' | translate }}</button>
+        <button class="rf-save"   (click)="save()">{{ 'COMMON.SAVE' | translate }}</button>
+      </div>
+    </div>
+
+    <!-- Bouton ajouter ──────────────────────────────────────────────────── -->
+    <button class="add-btn" *ngIf="!showForm" (click)="openAdd()">
+      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/></svg>
+      {{ 'SHELL.ALERT_RULES_ADD' | translate }}
+    </button>
+
+  </div>
+</div>

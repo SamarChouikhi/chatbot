@@ -1,0 +1,55 @@
+
+# ── Données ─────────────────────────────────────────────────────────────────
+donnees:
+  fichier: "gaz.csv"
+  dossier_resultats: "outputs/gaz"
+  #date_debut: "2025-09-01"
+  #date_fin:   "2026-01-31"
+
+# ── Colonnes à analyser ──────────────────────────────────────────────────────
+detection:
+  colonnes:
+    - conso
+    - avg_debit_per_min
+  min_features_anomalous: 1
+
+# ── Modèle de prédiction (Chronos) ──────────────────────────────────────────
+modele:
+  historique_heures: 504
+  prediction_heures: 24
+  nom: "amazon/chronos-2"
+  accelerateur: "cuda"
+  num_echantillons: 50
+
+# ── Seuil de détection ───────────────────────────────────────────────────────
+seuil:
+  strategie: "sigma"
+  k_sigma: 2.5
+  alpha: 0.5
+  max_facteur_volatilite: 2.0
+  percentile_bas:  0.05
+  percentile_haut: 0.95
+
+# ── Paramètres avancés ───────────────────────────────────────────────────────
+avance:
+  frequence: "1h"
+  limite_completion: 3
+  pas_glissement: 24
+  zoom_heures: 168
+  seuil_regime_heures: 48
+  min_lignes_device: 48
+  max_pct_offline: 0.80
+  facteur_rollover: 30.0
+
+# ── Prévision préventive ─────────────────────────────────────────────────────
+prevision:
+  horizon_heures: 168
+  confiance_min: 0.3
+
+# ── Calibration adaptative ────────────────────────────────────────────────────
+calibration:
+  active: true
+  heures: 1440
+  facteur_seuil: 1.0
+  seuil_drift_z: 3.0
+  force: false

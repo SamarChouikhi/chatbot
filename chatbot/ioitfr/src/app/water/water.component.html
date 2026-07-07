@@ -1,0 +1,516 @@
+<div class="energy-page" [class.panel-open]="selectedKpi !== null">
+
+  <!-- ════════════════════ KPI DETAIL PANEL ════════════════════ -->
+  <div class="kpi-panel-backdrop" *ngIf="selectedKpi" (click)="closeKpi()"></div>
+  <div class="kpi-detail-panel" *ngIf="selectedKpi && currentKpiDef" [style.--accent]="currentKpiDef.accent">
+    <div class="kdp-header">
+      <button class="kdp-back" (click)="closeKpi()">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/></svg>
+        {{ 'KPI_PANEL.BACK' | translate }}
+      </button>
+      <div class="kdp-title-row">
+        <div class="kdp-accent-bar"></div>
+        <h2 class="kdp-title">{{ currentKpiDef.title }}</h2>
+      </div>
+      <button class="kdp-close" (click)="closeKpi()">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
+      </button>
+    </div>
+    <div class="kdp-hero">
+      <div class="kdp-value-block">
+        <span class="kdp-value">{{ currentKpiDef.value }}</span>
+        <span class="kdp-unit">{{ currentKpiDef.unit }}</span>
+      </div>
+      <div class="kdp-status-badge" *ngIf="currentKpiDef.status"
+           [class.badge-ok]="currentKpiDef.status==='ok'"
+           [class.badge-danger]="currentKpiDef.status==='danger'"
+           [class.badge-warn]="currentKpiDef.status==='warn'">
+        {{ currentKpiDef.statusLabel }}
+      </div>
+    </div>
+    <div class="kdp-gauge-section" *ngIf="currentKpiDef.threshold !== null && currentKpiDef.threshold !== undefined">
+      <div class="kdp-gauge-label">
+        <span>0</span>
+        <span class="gauge-threshold-label">{{ 'KPI_PANEL.THRESHOLD' | translate }} {{ currentKpiDef.threshold }}{{ currentKpiDef.unit }}</span>
+        <span>100%</span>
+      </div>
+      <div class="kdp-gauge-track">
+        <div class="kdp-gauge-fill" [style.width]="currentKpiDef.gaugePercent + '%'"
+             [class.gf-ok]="currentKpiDef.status==='ok'"
+             [class.gf-warn]="currentKpiDef.status==='warn'"
+             [class.gf-danger]="currentKpiDef.status==='danger'">
+        </div>
+      </div>
+      <div class="kdp-threshold-note">{{ currentKpiDef.thresholdLabel }}</div>
+    </div>
+    <div class="kdp-scroll">
+      <div class="kdp-section">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.DEFINITION' | translate }}
+        </div>
+        <p class="kdp-text">{{ currentKpiDef.definition }}</p>
+      </div>
+      <div class="kdp-section">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.WHY' | translate }}
+        </div>
+        <p class="kdp-text">{{ currentKpiDef.why }}</p>
+      </div>
+      <div class="kdp-section" *ngIf="currentKpiDef.devices && currentKpiDef.devices.length">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zm0 18H7V5h10v14z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.DEVICE_DETAIL' | translate }}
+        </div>
+        <div class="kdp-device-table">
+          <div class="kdt-row" *ngFor="let d of currentKpiDef.devices">
+            <div class="kdt-id">{{ 'KPI_PANEL.DEVICE_PREFIX' | translate }}{{ d.id }}</div>
+            <div class="kdt-val">{{ d.val }}<span class="kdt-unit" *ngIf="d.unit"> {{ d.unit }}</span></div>
+            <div class="kdt-badge" [class.badge-ok]="d.ok" [class.badge-danger]="!d.ok">{{ d.badge }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="kdp-section">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.RECOMMENDATIONS' | translate }}
+        </div>
+        <ul class="kdp-reco-list">
+          <li *ngFor="let r of currentKpiDef.recommendations">{{ r }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page Header ── -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <button class="back-btn" (click)="goBack()">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </button>
+      <div class="page-icon-wrap water">
+        <svg viewBox="0 0 24 24"><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z" fill="white"/></svg>
+      </div>
+      <div>
+        <h1 class="page-title">{{ 'WATER.PAGE_TITLE' | translate }}</h1>
+        <span class="page-sub">{{ dataRange }} · {{ summaries.length }} {{ 'ENERGY.METERS_COUNT' | translate }}</span>
+      </div>
+    </div>
+    <div class="page-header-right">
+      <div class="period-tabs">
+        <button *ngFor="let p of periodOptions" [class.active]="selectedPeriod === p.value" (click)="onPeriodChange(p.value)">{{ p.label }}</button>
+      </div>
+      <button class="refresh-btn" (click)="load()" [class.spinning]="isLoading">
+        <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Error ── -->
+  <div class="error-banner" *ngIf="loadError">
+    <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+    {{ 'ENERGY.ERROR_LOAD' | translate }}
+    <button (click)="load()">{{ 'ENERGY.RETRY' | translate }}</button>
+  </div>
+
+  <!-- ══════════════════════ CONTENU PRINCIPAL ══════════════════════ -->
+  <ng-container *ngIf="!isLoading; else loadingTpl">
+
+    <!-- ════════ SUMMARY BANNER ════════ -->
+    <div class="module-summary-banner water-banner">
+      <div class="msb-item"><span class="msb-val">{{ fmt(totalConsoM3, 3) }}</span><span class="msb-lbl">{{ 'ENERGY.M3_CONSUMED' | translate }}</span></div>
+      <div class="msb-sep"></div>
+      <div class="msb-item"><span class="msb-val co2">{{ fmt(totalCo2, 2) }}</span><span class="msb-lbl">{{ 'ENERGY.CO2_TREATMENT' | translate }}</span></div>
+      <div class="msb-sep"></div>
+      <div class="msb-item"><span class="msb-val cost">{{ fmt(totalCost, 2) }}</span><span class="msb-lbl">{{ 'ENERGY.TND_BILLED' | translate }}</span></div>
+      <div class="msb-sep"></div>
+      <div class="msb-item"><span class="msb-val" [class.alert-val]="alertCount>0">{{ alertCount }}</span><span class="msb-lbl">{{ 'ENERGY.ALERTS_COUNT' | translate }}</span></div>
+      <button class="aria-insight-btn" (click)="openAriaInsight('summary', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+    </div>
+
+    <!-- ════════ RECOMMANDATIONS IA ════════ -->
+    <app-recommendation-panel domain="water"></app-recommendation-panel>
+
+    <div class="kpi-section-label">
+      <span>{{ 'KPI_PANEL.KPI_LABEL' | translate }}</span>
+      <span class="ksl-hint">{{ 'KPI_PANEL.KPI_HINT' | translate }}</span>
+    </div>
+
+    <!-- ════════ KPI CARDS v2 ════════ -->
+    <div class="kpi-grid-v2">
+
+      <div class="kpi-v2-card kpi-water" [class.kpi-selected]="selectedKpi==='conso'" (click)="openKpi('conso')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'WATER.KPI_CONSUMPTION' | translate }}</span>
+            <span class="kv2-sub">{{ 'WATER.KPI_CONSUMPTION_SUB' | translate }}</span>
+          </div>
+        </div>
+        <div class="kv2-value">{{ fmt(totalConsoM3, 3) }}<span class="kv2-unit"> m³</span></div>
+        <div class="kv2-devices-strip">
+          <span *ngFor="let s of summaries.slice(0,4)" class="kds-chip water-chip">
+            #{{ s.idDevice }}: {{ s.totalConsoM3.toFixed(2) }} m³
+          </span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <div class="kpi-v2-card kpi-orange" [class.kpi-selected]="selectedKpi==='co2'" (click)="openKpi('co2')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M17 8C8 10 5.9 16.17 3.82 21.34L5.71 22l1.03-2.41C8.63 20.14 10.28 20.5 12 20.5c4.42 0 8-3.58 8-8 0-1.5-.41-2.87-1-4.08z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'WATER.KPI_CO2' | translate }}</span>
+            <span class="kv2-sub">{{ 'WATER.KPI_CO2_SUB' | translate }}</span>
+          </div>
+        </div>
+        <div class="kv2-value">{{ fmt(totalCo2, 2) }}<span class="kv2-unit"> kgCO₂</span></div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <div class="kpi-v2-card kpi-green" [class.kpi-selected]="selectedKpi==='cost'" (click)="openKpi('cost')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'WATER.KPI_COST' | translate }}</span>
+            <span class="kv2-sub">{{ 'WATER.KPI_COST_RATE' | translate }}</span>
+          </div>
+        </div>
+        <div class="kv2-value">{{ fmt(totalCost, 2) }}<span class="kv2-unit"> TND</span></div>
+        <div class="kv2-devices-strip">
+          <span *ngFor="let s of summaries.slice(0,4)" class="kds-chip green-chip">
+            #{{ s.idDevice }}: {{ s.costTnd.toFixed(2) }} TND
+          </span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <div class="kpi-v2-card" [class.kpi-red]="alertCount>0" [class.kpi-green]="alertCount===0"
+           [class.kpi-selected]="selectedKpi==='alerts'" (click)="openKpi('alerts')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'WATER.KPI_ALERTS' | translate }}</span>
+            <span class="kv2-sub">{{ countBySeverity('CRITICAL') }} {{ 'ENERGY.CRITICAL_LABEL' | translate }} · {{ countBySeverity('HIGH') }} {{ 'ENERGY.HIGH_LABEL' | translate }}</span>
+          </div>
+          <div class="kv2-status-dot" [class.dot-ok]="alertCount===0" [class.dot-alert]="alertCount>0"></div>
+        </div>
+        <div class="kv2-value">{{ alertCount }}<span class="kv2-unit"> {{ 'ENERGY.ALERTS_COUNT' | translate }}</span></div>
+        <div class="kv2-alert-chips" *ngIf="alertCount > 0">
+          <span class="alert-chip-critical" *ngIf="countBySeverity('CRITICAL') > 0">🔴 {{ countBySeverity('CRITICAL') }} CRITICAL</span>
+          <span class="alert-chip-high"     *ngIf="countBySeverity('HIGH') > 0">🟠 {{ countBySeverity('HIGH') }} HIGH</span>
+          <span class="alert-chip-low"      *ngIf="countBySeverity('LOW') > 0">🟡 {{ countBySeverity('LOW') }} LOW</span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <div class="kpi-v2-card"
+           [class.kpi-red]="leakCount > 0"
+           [class.kpi-green]="leakCount === 0"
+           [class.kpi-selected]="selectedKpi==='leaks'" (click)="openKpi('leaks')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'WATER.KPI_LEAKS' | translate }}</span>
+            <span class="kv2-sub">{{ 'WATER.KPI_LEAKS_SUB' | translate }}</span>
+          </div>
+          <div class="kv2-status-dot"
+               [class.dot-ok]="leakCount===0"
+               [class.dot-alert]="leakCount>0"></div>
+        </div>
+        <div class="kv2-value">{{ leakCount }}<span class="kv2-unit"> {{ 'ENERGY.METERS_COUNT' | translate }}</span></div>
+        <div class="kv2-explain">{{ leakCount === 0 ? ('WATER.LEAKS_OK' | translate) : ('WATER.LEAKS_WARN' | translate) }}</div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <div class="kpi-v2-card kpi-cyan" [class.kpi-selected]="selectedKpi==='index'" (click)="openKpi('index')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'WATER.KPI_INDEX' | translate }}</span>
+            <span class="kv2-sub">{{ 'WATER.KPI_INDEX_SUB' | translate }}</span>
+          </div>
+        </div>
+        <div class="kv2-value">{{ fmt(totalIndex, 0) }}<span class="kv2-unit"> L</span></div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+    </div><!-- /kpi-grid-v2 -->
+
+    <!-- ════════════════════ SECTION GRAPHIQUES ════════════════════ -->
+    <div class="stats-section">
+      <div class="stats-section-header">
+        <span class="stats-section-title">
+          <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z" fill="currentColor"/></svg>
+          {{ 'WATER.STATS_TITLE' | translate }}
+        </span>
+        <span class="stats-section-sub">{{ summaries.length }} {{ 'ENERGY.METERS_COUNT' | translate }}</span>
+        <button class="aria-insight-btn" (click)="openAriaInsight('stats', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+      </div>
+
+      <!-- ── 1. Consommation journalière — pleine largeur ── -->
+      <div class="card stat-chart-card stat-chart-card--daily stat-chart-card--clickable" (click)="openChartModal()">
+        <div class="card-header">
+          <div>
+            <span class="card-title">{{ 'WATER.DAILY_CONSUMPTION' | translate }}</span>
+            <span class="card-sub">{{ 'ENERGY.DAILY_L' | translate }}</span>
+          </div>
+          <div class="chart-legend">
+            <span class="leg-item conso">⬤ {{ 'WATER.KPI_CONSUMPTION' | translate }}</span>
+          </div>
+          <span class="chart-type-badge bar-badge">{{ 'COMMON.CHART_BARS' | translate }}</span>
+        </div>
+        <div class="daily-canvas-body">
+          <div class="no-data" *ngIf="!chart?.points?.length">{{ 'COMMON.NO_DATA' | translate }}</div>
+          <canvas #wDailyCanvas></canvas>
+        </div>
+        <div class="chart-totals" *ngIf="chart">
+          <span class="ct-item water-c"><em>Total</em> {{ chartTotalConso }} m³</span>
+          <span class="ct-item orange"><em>CO₂</em> {{ chartTotalCo2 }} kg</span>
+          <span class="ct-item green"><em>{{ 'WATER.KPI_COST' | translate }}</em> {{ chartTotalCost }} TND</span>
+        </div>
+        <div class="chart-click-hint">↗ Agrandir</div>
+      </div>
+
+      <!-- ── 2. Grille 2×2 — analyses ── -->
+      <div class="stats-charts-grid">
+
+        <div class="card stat-chart-card stat-chart-card--clickable" (click)="openChartModal()">
+          <div class="card-header">
+            <div><span class="card-title">{{ 'ENERGY.EVOLUTION' | translate }}</span><span class="card-sub">m³</span></div>
+            <span class="chart-type-badge line-badge">{{ 'COMMON.CHART_LINE' | translate }}</span>
+          </div>
+          <div class="card-body stat-chart-body">
+            <div class="no-data" *ngIf="!chart?.points?.length">{{ 'ENERGY.NO_DATA_CHART' | translate }}</div>
+            <canvas #lineCanvas></canvas>
+          </div>
+          <div class="chart-click-hint">↗ Agrandir</div>
+        </div>
+
+        <div class="card stat-chart-card">
+          <div class="card-header">
+            <div><span class="card-title">{{ 'ENERGY.REPARTITION' | translate }}</span><span class="card-sub">m³</span></div>
+            <span class="chart-type-badge donut-badge">{{ 'COMMON.CHART_DONUT' | translate }}</span>
+          </div>
+          <div class="card-body stat-chart-body">
+            <div class="no-data" *ngIf="!summaries.length">{{ 'ENERGY.NO_METER' | translate }}</div>
+            <canvas #donutCanvas></canvas>
+          </div>
+        </div>
+
+        <div class="card stat-chart-card stat-chart-card--clickable" (click)="openChartModal('co2cost')">
+          <div class="card-header">
+            <div><span class="card-title">{{ 'ENERGY.CO2_COST_PER_METER' | translate }}</span><span class="card-sub">{{ 'ENERGY.COMPARATIVE' | translate }}</span></div>
+            <span class="chart-type-badge bar-badge">{{ 'COMMON.CHART_BARS' | translate }}</span>
+          </div>
+          <div class="card-body stat-chart-body">
+            <div class="no-data" *ngIf="!summaries.length">{{ 'ENERGY.NO_METER' | translate }}</div>
+            <canvas #barCo2Canvas></canvas>
+          </div>
+          <div class="chart-click-hint">↗ Agrandir</div>
+        </div>
+
+        <div class="card stat-chart-card">
+          <div class="card-header">
+            <div><span class="card-title">{{ 'ENERGY.PROFILE_METERS' | translate }}</span><span class="card-sub">{{ 'ENERGY.COMPARATIVE' | translate }}</span></div>
+            <span class="chart-type-badge radar-badge">{{ 'COMMON.CHART_RADAR' | translate }}</span>
+          </div>
+          <div class="card-body stat-chart-body">
+            <div class="no-data" *ngIf="!summaries.length">{{ 'ENERGY.NO_METER' | translate }}</div>
+            <canvas #radarCanvas></canvas>
+          </div>
+        </div>
+
+      </div><!-- /stats-charts-grid -->
+
+      <!-- ── 3. Consommation par compteur — pleine largeur ── -->
+      <div class="card stat-chart-card stat-chart-card--wide stat-chart-card--clickable" (click)="openChartModal('consoByMeter')">
+        <div class="card-header">
+          <div><span class="card-title">{{ 'ENERGY.CONSO_BY_METER' | translate }}</span><span class="card-sub">m³</span></div>
+          <span class="chart-type-badge bar-badge">{{ 'COMMON.CHART_BARS' | translate }}</span>
+        </div>
+        <div class="card-body stat-chart-body stat-chart-body--wide">
+          <div class="no-data" [hidden]="summaries.length">{{ 'ENERGY.NO_METER' | translate }}</div>
+          <canvas #groupedBarCanvas></canvas>
+        </div>
+        <div class="chart-click-hint">↗ Agrandir</div>
+      </div>
+
+    </div><!-- /stats-section -->
+
+    <!-- ════════ RÉSUMÉ PAR COMPTEUR ════════ -->
+    <div class="card quality-card">
+      <div class="card-header">
+        <span class="card-title">{{ 'ENERGY.SUMMARY_BY_METER' | translate }}</span>
+        <span class="card-sub">{{ summaries.length }} {{ 'ENERGY.METERS_COUNT' | translate }}</span>
+        <button class="aria-insight-btn" (click)="openAriaInsight('quality', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+      </div>
+      <div class="card-body quality-body">
+        <div class="no-data" *ngIf="!summaries.length">{{ 'ENERGY.NO_METER_FOUND' | translate }}</div>
+        <div class="dev-summary-list">
+          <div class="dev-row" *ngFor="let s of summaries">
+            <span class="dev-id">#{{ s.idDevice }}</span>
+            <span class="dev-kwh water-c">{{ s.totalConsoM3.toFixed(2) }} m³</span>
+            <span class="dev-co2">{{ s.co2Kg.toFixed(1) }} kg</span>
+            <span class="dev-status" [ngClass]="s.alertCount > 0 ? 'status-alert' : 'status-ok'">{{ s.alertCount > 0 ? 'ALERTE' : 'OK' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ RT TABLE ════════ -->
+    <div class="card rt-card" *ngIf="rtData.length">
+      <div class="card-header">
+        <span class="card-title">{{ 'WATER.REALTIME' | translate }}</span>
+        <span class="card-sub">{{ rtData.length }} {{ 'ENERGY.ACTIVE_METERS' | translate }}</span>
+      </div>
+      <div class="card-body table-body">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>{{ 'WATER.COL_DEVICE' | translate }}</th>
+                <th>{{ 'WATER.COL_INDEX' | translate }}</th>
+                <th>{{ 'WATER.COL_LEAK' | translate }}</th>
+                <th>{{ 'WATER.COL_FRAUD' | translate }}</th>
+                <th>{{ 'WATER.COL_BATTERY' | translate }}</th>
+                <th>RSSI</th><th>SNR</th>
+                <th>{{ 'WATER.COL_STATUS' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let rt of rtForTable">
+                <td class="cell-id">#{{ rt.idDevice }}</td>
+                <td>{{ rt.wmIndex | number:'1.0-0' }}</td>
+                <td><span class="flag-badge" [class.flag-on]="rt.leak > 0">{{ rt.leak > 0 ? ('ENERGY.FLAG_YES' | translate) : ('ENERGY.FLAG_NO' | translate) }}</span></td>
+                <td><span class="flag-badge" [class.flag-on]="rt.fraud > 0">{{ rt.fraud > 0 ? ('ENERGY.FLAG_YES' | translate) : ('ENERGY.FLAG_NO' | translate) }}</span></td>
+                <td>
+                  <div class="batt-bar">
+                    <div class="batt-fill"
+                         [style.width]="normBatt(rt.batteryLevel) + '%'"
+                         [class.batt-ok]="normBatt(rt.batteryLevel) > 40"
+                         [class.batt-warn]="normBatt(rt.batteryLevel) <= 40 && normBatt(rt.batteryLevel) > 15"
+                         [class.batt-low]="normBatt(rt.batteryLevel) <= 15">
+                    </div>
+                  </div>
+                  <span class="batt-label">{{ normBatt(rt.batteryLevel) }}%</span>
+                </td>
+                <td>{{ rt.rssi }}</td>
+                <td>{{ rt.snr }}</td>
+                <td><span class="status-badge" [ngClass]="statusClass(rt.status)">{{ rt.status }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ ALERTS ════════ -->
+    <div class="card alerts-card">
+      <div class="card-header">
+        <span class="card-title">{{ 'WATER.ACTIVE_ALERTS' | translate }}</span>
+        <div class="alert-counts">
+          <span class="ac-badge critical">{{ countBySeverity('CRITICAL') }} {{ 'ENERGY.CRITICAL_LABEL' | translate }}</span>
+          <span class="ac-badge high">{{ countBySeverity('HIGH') }} {{ 'ENERGY.HIGH_LABEL' | translate }}</span>
+          <span class="ac-badge low">{{ countBySeverity('LOW') }} {{ 'ENERGY.LOW_LABEL' | translate }}</span>
+        </div>
+        <button class="aria-insight-btn" (click)="openAriaInsight('alerts', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+      </div>
+      <div class="card-body">
+        <div class="no-alerts" *ngIf="!alerts.length">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+          {{ 'WATER.NO_ALERTS' | translate }}
+        </div>
+        <div class="alert-row" *ngFor="let a of alerts" [ngClass]="alertClass(a.severity)">
+          <div class="alert-icon">{{ alertIcon(a.type) }}</div>
+          <div class="alert-body">
+            <div class="alert-top">
+              <span class="alert-device">{{ 'KPI_PANEL.DEVICE_PREFIX' | translate }}{{ a.idDevice }}</span>
+              <span class="alert-type-badge">{{ a.type }}</span>
+              <span class="alert-sev" [ngClass]="'sev-' + a.severity.toLowerCase()">{{ a.severity }}</span>
+              <span class="alert-time">{{ fmtAlertDate(a.date) }}</span>
+            </div>
+            <div class="alert-message">{{ a.message }}</div>
+            <div class="alert-rec">💡 {{ recommendation(a.type) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </ng-container>
+
+  <ng-template #loadingTpl>
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <span>{{ 'WATER.LOADING' | translate }}</span>
+    </div>
+  </ng-template>
+
+  <!-- ══════════════════════════════════════════════════════
+       MODAL CHART — Évolution consommation (plein écran)
+  ══════════════════════════════════════════════════════════ -->
+  <div class="water-chart-modal-backdrop"
+       [class.open]="chartModalOpen"
+       (click)="handleChartModalBackdrop($event)">
+    <div class="water-chart-modal" (click)="$event.stopPropagation()">
+
+      <div class="wcm-header">
+        <div class="wcm-title-block">
+          <span class="wcm-badge">{{ chartModalBadge }}</span>
+          <h2 class="wcm-title">{{ chartModalTitle }}</h2>
+        </div>
+        <button class="wcm-close" (click)="closeChartModal()">✕</button>
+      </div>
+
+      <div class="wcm-kpi-row">
+        <div class="wcm-kpi-chip" *ngIf="chartModalType === 'evolution'">
+          <span class="wcm-kv">{{ chartTotalConso }} m³</span>
+          <span class="wcm-kl">Total période</span>
+        </div>
+        <div class="wcm-kpi-chip" *ngIf="chartModalType === 'evolution'">
+          <span class="wcm-kv" style="color:#f59e0b">{{ chartTotalCo2 }} kg</span>
+          <span class="wcm-kl">CO₂ émis</span>
+        </div>
+        <div class="wcm-kpi-chip" *ngIf="chartModalType === 'evolution'">
+          <span class="wcm-kv" style="color:#2ecc71">{{ chartTotalCost }} TND</span>
+          <span class="wcm-kl">Coût total</span>
+        </div>
+        <div class="wcm-kpi-chip" *ngIf="chartModalType !== 'evolution'">
+          <span class="wcm-kv">{{ summaries.length }}</span>
+          <span class="wcm-kl">{{ 'COMMON.METERS_LABEL' | translate }}</span>
+        </div>
+        <div class="wcm-kpi-chip" *ngIf="chartModalType !== 'evolution'">
+          <span class="wcm-kv" style="color:#f59e0b">{{ fmt(totalCo2, 2) }} kg</span>
+          <span class="wcm-kl">CO₂ total</span>
+        </div>
+        <div class="wcm-kpi-chip" *ngIf="chartModalType !== 'evolution'">
+          <span class="wcm-kv" style="color:#2ecc71">{{ fmt(totalCost, 2) }} TND</span>
+          <span class="wcm-kl">Coût total</span>
+        </div>
+      </div>
+
+      <div class="wcm-chart-wrap">
+        <canvas #modalChartCanvas></canvas>
+      </div>
+
+      <div class="wcm-footer">
+        <span class="wcm-hint">Survolez un point pour le détail — Échap pour fermer</span>
+      </div>
+
+    </div>
+  </div>
+
+</div>

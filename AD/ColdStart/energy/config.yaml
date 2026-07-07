@@ -1,0 +1,139 @@
+
+# ── Données ──────────────────────────────────────────────────────────────────
+donnees:
+
+  # CSV du nouveau device (données réelles partielles — peut être vide au démarrage)
+  fichier_nouveau_device: ""
+
+  # CSV des devices existants = source des profils statistiques de population
+  # Ce fichier est typiquement le même que celui utilisé en HotStart.
+  fichier_population: "energy.csv"   # chemin vers le CSV population — à configurer
+
+  # Dossier de sortie : résultats CSV + graphiques
+  dossier_resultats: "outputs/coldstart"
+
+  # ── Filtre de période (optionnel) ─────────────────────────────────────────
+  #date_debut: "2025-01-01"
+  #date_fin:   "2025-06-30"
+
+
+# ── Nouveau device ────────────────────────────────────────────────────────────
+nouveau_device:
+
+  # Identifiant du nouveau device (doit être absent du fichier_population)
+  id: "NEW_DEVICE_001"
+
+  # Phases à surveiller (L1/L2/L3 pour énergie)
+  phases:
+    - L1
+    - L2
+    - L3
+
+
+# ── Colonnes (doivent correspondre aux CSV) ──────────────────────────────────
+colonnes:
+  timestamp:  "date"
+  valeur:
+    - cons_en
+  item_id:    "item_id"
+  device:     "id_device"
+  phase:      "phase"
+
+
+# ── Algorithmes de détection cold start ─────────────────────────────────────
+algorithmes:
+
+  # Mode : "zscore" | "iqr" | "isolation_forest" | "chronos" | "ensemble"
+  # ensemble = vote majoritaire Z-Score + IQR + IF + Chronos (recommandé)
+  mode: "ensemble"
+
+  # Pour l'ensemble : nombre minimum d'algorithmes devant signaler une anomalie
+  min_votes_anomalie: 2
+
+  zscore:
+    # |z| > seuil → anomalie
+    seuil: 3.0
+
+  iqr:
+    # Fences : Q1 − k×IQR  et  Q3 + k×IQR
+    multiplicateur: 1.5
+
+  isolation_forest:
+    # Taux de contamination attendu (fraction d'anomalies dans les données)
+    contamination: 0.05
+    n_estimateurs: 100
+    max_samples: 256
+
+
+# ── Chronos zero-shot (FPT) ───────────────────────────────────────────────────
+chronos:
+  # Modèle Chronos à utiliser en zero-shot (tiny = le plus rapide, suffit en cold start)
+  # Options : autogluon/chronos-t5-tiny | chronos-t5-small | autogluon/chronos-2-small
+  modele: "autogluon/chronos-t5-tiny"
+  accelerateur: "cpu"        # "cpu" | "cuda" | "mps"
+  contexte: 48               # heures de contexte fourni à Chronos (seed synthétique)
+  horizon: 12                # heures de prévision par fenêtre glissante
+  num_samples: 20            # échantillons Monte Carlo (précision vs vitesse)
+  q_bas:  0.1                # quantile bas de l'intervalle de prévision
+  q_haut: 0.9                # quantile haut
+  k_sigma: 1.5               # élargissement de l'intervalle (plus grand = plus tolérant)
+  actif: true                # inclure Chronos dans l'ensemble (false = désactiver)
+
+
+# ── Profil de population ──────────────────────────────────────────────────────
+profil:
+
+  # Nombre minimum de devices dans la population pour que le profil soit fiable
+  # 1 = accepte un profil mono-device (cas nouveau déploiement BMS)
+  min_devices: 1
+
+  # Colonnes à exclure du calcul de profil (identifiants non-numériques)
+  colonnes_exclues:
+    - item_id
+    - id_device
+    - phase
+    - date
+
+
+# ── Données synthétiques ──────────────────────────────────────────────────────
+synthese:
+
+  # Jours de données synthétiques à générer pour amorcer le détecteur
+  # 30 jours = 720 points horaires → suffisant pour IF + Z-score stables
+  jours: 30
+
+  # Graine aléatoire pour reproductibilité (null = aléatoire à chaque run)
+  graine: 42
+
+  # Facteur de bruit : 0 = données parfaitement "moyennes", 1 = bruit plein σ
+  facteur_bruit: 0.8
+
+  # Fraction de pics anormaux injectés dans les données synthétiques (0 = aucun)
+  # Permet d'entraîner Isolation Forest sur des exemples positifs réalistes
+  taux_anomalies_synthetiques: 0.03
+
+
+# ── Warmup progressif ─────────────────────────────────────────────────────────
+warmup:
+
+  # Heures de données réelles avant que le système soit considéré "chaud"
+  # Après warmup_heures, recommander la bascule vers HotStart (Chronos)
+  heures: 336
+
+  # Stratégie de pondération pendant le warmup :
+  # "hard"  → cold start pur jusqu'à warmup, puis recommande HotStart
+  # "blend" → mélange progressif cold→hot (non implémenté, réservé futur)
+  strategie: "hard"
+
+
+# ── Paramètres avancés ────────────────────────────────────────────────────────
+avance:
+
+  # Fréquence de rééchantillonnage
+  frequence: "1h"
+
+  # Heures consécutives à compléter si données manquantes
+  limite_completion: 3
+
+  # Run continu > seuil → is_regime_change (dérive longue)
+  seuil_regime_heures: 24

@@ -1,0 +1,85 @@
+
+# ── Données ──────────────────────────────────────────────────────────────────
+donnees:
+  fichier_nouveau_device: ""
+  fichier_population: "fuel.csv"   # chemin vers le CSV population — à configurer
+  dossier_resultats: "outputs/coldstart_fuel"
+  #date_debut: "2025-09-01"
+  #date_fin:   "2026-01-31"
+
+# ── Nouveau device ────────────────────────────────────────────────────────────
+nouveau_device:
+  id: "NEW_FUEL_001"
+
+# ── Colonnes ─────────────────────────────────────────────────────────────────
+colonnes:
+  timestamp: "date"
+  valeur:
+    - consommation
+    - vitesse
+  item_id:  "item_id"
+  device:   "id_device"
+
+# ── Algorithmes ──────────────────────────────────────────────────────────────
+algorithmes:
+  # Mode : "zscore" | "iqr" | "isolation_forest" | "chronos" | "ensemble"
+  mode: "ensemble"
+  min_votes_anomalie: 2
+
+  zscore:
+    # Distribution active étroite (mean=5.24, std=1.99, max=10.35)
+    # z=2.5 → upper_bound=5.24+2.5*1.99≈10.2 ≈ max réel → seuil optimal
+    seuil: 2.5
+
+  iqr:
+    # IQR élargi : q25=0 (46% offline), q75≈7 → fence large par défaut
+    # Multiplicateur 2.0 pour éviter les faux positifs sur heures normales
+    multiplicateur: 2.0
+
+  isolation_forest:
+    contamination: 0.05
+    n_estimateurs: 100
+    max_samples: 256
+
+
+# ── Chronos zero-shot (FPT) ───────────────────────────────────────────────────
+chronos:
+  modele: "autogluon/chronos-t5-tiny"
+  accelerateur: "cuda"
+  contexte: 72
+  horizon: 12
+  num_samples: 20
+  q_bas:  0.1
+  q_haut: 0.9
+  k_sigma: 1.5   # fuel : 46% offline → tolérant (offline ≠ anomalie)
+  actif: true
+
+# ── Profil de population ──────────────────────────────────────────────────────
+profil:
+  min_devices: 1
+  min_lignes_device: 48
+  # Fuel : 46% offline normal → accepter jusqu'à 70%
+  max_pct_offline: 0.70
+  facteur_rollover: 30.0
+
+# ── Données synthétiques ──────────────────────────────────────────────────────
+synthese:
+  jours: 30
+  graine: 42
+  # Fuel : distribution active étroite → peu de bruit
+  facteur_bruit: 0.6
+  # Fuel : anomalies = sur-conso, vitesse excessive, vol carburant
+  taux_anomalies_synthetiques: 0.02
+  # Fuel : 46% offline (nuit + weekend) — on cible le rate réel
+  taux_offline_synthetique: 0.46
+
+# ── Warmup ────────────────────────────────────────────────────────────────────
+warmup:
+  heures: 336
+
+# ── Paramètres avancés ────────────────────────────────────────────────────────
+avance:
+  frequence: "1h"
+  limite_completion: 3
+  # Fuel : arrêt weekend (48h) = normal → régime seulement dès 72h
+  seuil_regime_heures: 72

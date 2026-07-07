@@ -1,0 +1,37 @@
+.chart-card {
+  margin-top: 10px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--chart-bg, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--chart-border, rgba(255, 255, 255, 0.08));
+
+  :host-context(.light) & {
+    --chart-bg    : rgba(0, 0, 0, 0.03);
+    --chart-border: rgba(0, 0, 0, 0.08);
+  }
+}
+
+.chart-title {
+  font-size   : 11px;
+  font-weight : 600;
+  color       : rgba(255, 255, 255, 0.55);
+  padding     : 8px 12px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+
+  :host-context(.light) & {
+    color: rgba(0, 0, 0, 0.45);
+  }
+}
+
+.chart-wrap {
+  padding : 4px 8px 10px;
+  height  : 180px;
+  position: relative;
+
+  canvas {
+    display: block;
+    width : 100% !important;
+    height: 100% !important;
+  }
+}

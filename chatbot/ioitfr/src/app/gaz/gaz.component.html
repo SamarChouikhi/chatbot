@@ -1,0 +1,600 @@
+<div class="energy-page" [class.panel-open]="selectedKpi !== null">
+
+  <!-- ════════════════════ KPI DETAIL PANEL ════════════════════ -->
+  <div class="kpi-panel-backdrop" *ngIf="selectedKpi" (click)="closeKpi()"></div>
+  <div class="kpi-detail-panel" *ngIf="selectedKpi && currentKpiDef" [style.--accent]="currentKpiDef.accent">
+    <div class="kdp-header">
+      <button class="kdp-back" (click)="closeKpi()">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/></svg>
+        {{ 'KPI_PANEL.BACK' | translate }}
+      </button>
+      <div class="kdp-title-row">
+        <div class="kdp-accent-bar"></div>
+        <h2 class="kdp-title">{{ currentKpiDef.title }}</h2>
+      </div>
+      <button class="kdp-close" (click)="closeKpi()">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
+      </button>
+    </div>
+    <div class="kdp-hero">
+      <div class="kdp-value-block">
+        <span class="kdp-value">{{ currentKpiDef.value }}</span>
+        <span class="kdp-unit">{{ currentKpiDef.unit }}</span>
+      </div>
+      <div class="kdp-status-badge" *ngIf="currentKpiDef.status"
+           [class.badge-ok]="currentKpiDef.status==='ok'"
+           [class.badge-danger]="currentKpiDef.status==='danger'"
+           [class.badge-warn]="currentKpiDef.status==='warn'">
+        {{ currentKpiDef.statusLabel }}
+      </div>
+    </div>
+    <div class="kdp-gauge-section" *ngIf="currentKpiDef.threshold !== null && currentKpiDef.threshold !== undefined">
+      <div class="kdp-gauge-label">
+        <span>0</span>
+        <span class="gauge-threshold-label">{{ 'KPI_PANEL.THRESHOLD' | translate }} {{ currentKpiDef.threshold }}{{ currentKpiDef.unit }}</span>
+        <span>100%</span>
+      </div>
+      <div class="kdp-gauge-track">
+        <div class="kdp-gauge-fill" [style.width]="currentKpiDef.gaugePercent + '%'"
+             [class.gf-ok]="currentKpiDef.status==='ok'"
+             [class.gf-warn]="currentKpiDef.status==='warn'"
+             [class.gf-danger]="currentKpiDef.status==='danger'">
+        </div>
+        <div class="kdp-threshold-marker" *ngIf="currentKpiDef.threshold"
+             [style.left]="(currentKpiDef.threshold >= 1 ? 85 : currentKpiDef.threshold * 100) + '%'">
+        </div>
+      </div>
+      <div class="kdp-threshold-note">{{ currentKpiDef.thresholdLabel }}</div>
+    </div>
+    <div class="kdp-scroll">
+      <div class="kdp-section">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.DEFINITION' | translate }}
+        </div>
+        <p class="kdp-text">{{ currentKpiDef.definition }}</p>
+      </div>
+      <div class="kdp-section">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.WHY' | translate }}
+        </div>
+        <p class="kdp-text">{{ currentKpiDef.why }}</p>
+      </div>
+      <div class="kdp-section" *ngIf="currentKpiDef.devices && currentKpiDef.devices.length">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M17 1H7c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-2-2-2zm0 18H7V5h10v14z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.DEVICE_DETAIL' | translate }}
+        </div>
+        <div class="kdp-device-table">
+          <div class="kdt-row" *ngFor="let d of currentKpiDef.devices">
+            <div class="kdt-id">{{ 'KPI_PANEL.DEVICE_PREFIX' | translate }}{{ d.id }}</div>
+            <div class="kdt-val">{{ d.val }}<span class="kdt-unit" *ngIf="d.unit"> {{ d.unit }}</span></div>
+            <div class="kdt-badge" [class.badge-ok]="d.ok" [class.badge-danger]="!d.ok">{{ d.badge }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="kdp-section">
+        <div class="kdp-section-title">
+          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/></svg>
+          {{ 'KPI_PANEL.RECOMMENDATIONS' | translate }}
+        </div>
+        <ul class="kdp-reco-list">
+          <li *ngFor="let r of currentKpiDef.recommendations">{{ r }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Page Header ── -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <button class="back-btn" (click)="goBack()">
+        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+      </button>
+      <div class="page-icon-wrap gaz">
+        <svg viewBox="0 0 24 24"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z" fill="white"/></svg>
+      </div>
+      <div>
+        <h1 class="page-title">{{ 'GAZ.PAGE_TITLE' | translate }}</h1>
+        <span class="page-sub">{{ dataRange }} · {{ summaries.length }} {{ 'ENERGY.METERS_COUNT' | translate }}</span>
+      </div>
+    </div>
+    <div class="page-header-right">
+      <div class="period-tabs">
+        <button *ngFor="let p of periodOptions"
+                [class.active]="selectedPeriod === p.value"
+                (click)="onPeriodChange(p.value)">{{ p.label }}</button>
+      </div>
+      <button class="refresh-btn" (click)="load()" [class.spinning]="isLoading">
+        <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Error banner ── -->
+  <div class="error-banner" *ngIf="loadError">
+    <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+    {{ 'ENERGY.ERROR_LOAD' | translate }}
+    <button (click)="load()">{{ 'ENERGY.RETRY' | translate }}</button>
+  </div>
+
+  <ng-container *ngIf="!isLoading; else loadingTpl">
+
+    <!-- ════════ KPI SUMMARY BANNER ════════ -->
+    <div class="module-summary-banner gaz-banner">
+      <div class="msb-item"><span class="msb-val gaz">{{ fmt(totalConso / 1000, 2) }}</span><span class="msb-lbl">{{ 'ENERGY.M3_CONSUMED' | translate }}</span></div>
+      <div class="msb-sep"></div>
+      <div class="msb-item"><span class="msb-val co2">{{ fmt(totalCo2, 1) }}</span><span class="msb-lbl">{{ 'ENERGY.CO2_EMITTED' | translate }}</span></div>
+      <div class="msb-sep"></div>
+      <div class="msb-item"><span class="msb-val cost">{{ fmt(totalCost, 2) }}</span><span class="msb-lbl">{{ 'ENERGY.TND_BILLED' | translate }}</span></div>
+      <div class="msb-sep"></div>
+      <div class="msb-item"><span class="msb-val" [class.alert-val]="alertCount>0">{{ alertCount }}</span><span class="msb-lbl">{{ 'ENERGY.ALERTS_COUNT' | translate }}</span></div>
+      <button class="aria-insight-btn" (click)="openAriaInsight('summary', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+    </div>
+
+    <!-- ════════ RECOMMANDATIONS IA ════════ -->
+    <app-recommendation-panel domain="gas"></app-recommendation-panel>
+
+    <div class="kpi-section-label">
+      <span>{{ 'KPI_PANEL.KPI_LABEL' | translate }}</span>
+      <span class="ksl-hint">{{ 'KPI_PANEL.KPI_HINT' | translate }}</span>
+    </div>
+
+    <!-- ════════ KPI CARDS ════════ -->
+    <div class="kpi-grid-v2">
+
+      <!-- Consommation -->
+      <div class="kpi-v2-card kpi-gaz" [class.kpi-selected]="selectedKpi==='conso'" (click)="openKpi('conso')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'GAZ.KPI_CONSUMPTION' | translate }}</span>
+            <span class="kv2-sub">{{ 'GAZ.KPI_CONSUMPTION_SUB' | translate }}</span>
+          </div>
+          <div class="kv2-trend" [class.trend-up]="!kpiCards[0]?.trendUp" [class.trend-down]="kpiCards[0]?.trendUp">
+            {{ kpiCards[0]?.trend }}
+          </div>
+        </div>
+        <div class="kv2-value">{{ fmt(totalConso / 1000, 2) }}<span class="kv2-unit"> m³</span></div>
+        <div class="kv2-devices-strip">
+          <span *ngFor="let s of summaries.slice(0,4)" class="kds-chip">
+            #{{ s.idDevice }}: {{ ((s.totalConsoM ?? 0) / 1000).toFixed(1) }} m³
+          </span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <!-- CO2 -->
+      <div class="kpi-v2-card kpi-orange" [class.kpi-selected]="selectedKpi==='co2'" (click)="openKpi('co2')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'GAZ.KPI_CO2' | translate }}</span>
+            <span class="kv2-sub">{{ 'GAZ.KPI_CO2_SUB' | translate }}</span>
+          </div>
+        </div>
+        <div class="kv2-value">{{ fmt(totalCo2, 1) }}<span class="kv2-unit"> kgCO₂</span></div>
+        <div class="kv2-gauge-mini">
+          <div class="kgm-fill orange-fill" [style.width]="co2GaugeWidth"></div>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <!-- Coût -->
+      <div class="kpi-v2-card kpi-green" [class.kpi-selected]="selectedKpi==='cost'" (click)="openKpi('cost')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'GAZ.KPI_COST' | translate }}</span>
+            <span class="kv2-sub">{{ 'GAZ.KPI_COST_RATE' | translate }}</span>
+          </div>
+        </div>
+        <div class="kv2-value">{{ fmt(totalCost, 2) }}<span class="kv2-unit"> TND</span></div>
+        <div class="kv2-devices-strip">
+          <span *ngFor="let s of summaries.slice(0,4)" class="kds-chip green-chip">
+            #{{ s.idDevice }}: {{ (s.costTnd ?? 0).toFixed(1) }} TND
+          </span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <!-- Alertes -->
+      <div class="kpi-v2-card" [class.kpi-red]="alertCount>0" [class.kpi-green]="alertCount===0"
+           [class.kpi-selected]="selectedKpi==='alerts'" (click)="openKpi('alerts')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'GAZ.KPI_ALERTS' | translate }}</span>
+            <span class="kv2-sub">{{ countBySeverity('CRITICAL') }} {{ 'COMMON.CRITICAL' | translate }} · {{ countBySeverity('HIGH') }} {{ 'COMMON.HIGH' | translate }}</span>
+          </div>
+          <div class="kv2-status-dot" [class.dot-ok]="alertCount===0" [class.dot-alert]="alertCount>0"></div>
+        </div>
+        <div class="kv2-value">{{ alertCount }}<span class="kv2-unit"> {{ 'COMMON.ALERTS' | translate }}</span></div>
+        <div class="kv2-alert-chips" *ngIf="alertCount > 0">
+          <span class="alert-chip-critical" *ngIf="countBySeverity('CRITICAL') > 0">🔴 {{ countBySeverity('CRITICAL') }} CRITICAL</span>
+          <span class="alert-chip-high"     *ngIf="countBySeverity('HIGH') > 0">🟠 {{ countBySeverity('HIGH') }} HIGH</span>
+          <span class="alert-chip-low"      *ngIf="countBySeverity('LOW') > 0">🟡 {{ countBySeverity('LOW') }} LOW</span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <!-- Débit -->
+      <div class="kpi-v2-card kpi-cyan" [class.kpi-selected]="selectedKpi==='debit'" (click)="openKpi('debit')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'GAZ.KPI_DEBIT' | translate }}</span>
+            <span class="kv2-sub">{{ 'GAZ.KPI_DEBIT_SUB' | translate }}</span>
+          </div>
+          <div class="kv2-status-dot dot-ok"></div>
+        </div>
+        <div class="kv2-value">{{ avgDebit.toFixed(2) }}<span class="kv2-unit"> L/min</span></div>
+        <div class="kv2-gauge">
+          <div class="kv2-gauge-track">
+            <div class="kv2-gauge-fill gf-ok" [style.width]="debitGaugeWidth"></div>
+          </div>
+          <span class="gauge-note note-ok">{{ 'GAZ.KPI_DEBIT_SUB' | translate }}</span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+      <!-- Fuites -->
+      <div class="kpi-v2-card"
+           [class.kpi-red]="leakCount>0" [class.kpi-green]="leakCount===0"
+           [class.kpi-selected]="selectedKpi==='leaks'" (click)="openKpi('leaks')">
+        <div class="kv2-top">
+          <div class="kv2-icon-wrap">
+            <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/></svg>
+          </div>
+          <div class="kv2-meta">
+            <span class="kv2-label">{{ 'GAZ.KPI_LEAKS' | translate }}</span>
+            <span class="kv2-sub">{{ 'GAZ.KPI_LEAKS_SUB' | translate }}</span>
+          </div>
+          <div class="kv2-status-dot" [class.dot-ok]="leakCount===0" [class.dot-alert]="leakCount>0"></div>
+        </div>
+        <div class="kv2-value">{{ leakCount }}<span class="kv2-unit"> {{ 'ENERGY.METERS_COUNT' | translate }}</span></div>
+        <div class="kv2-gauge">
+          <div class="kv2-gauge-track">
+            <div class="kv2-gauge-fill" [style.width]="leakGaugeWidth"
+                 [class.gf-ok]="leakCount===0" [class.gf-danger]="leakCount>0"></div>
+          </div>
+          <span class="gauge-note" [class.note-ok]="leakCount===0" [class.note-danger]="leakCount>0">
+            {{ leakCount === 0 ? ('GAZ.LEAKS_OK' | translate) : ('GAZ.LEAKS_WARN' | translate) }}
+          </span>
+        </div>
+        <div class="kv2-action">{{ 'KPI_PANEL.ANALYSE_DETAIL' | translate }}</div>
+      </div>
+
+    </div><!-- /kpi-grid-v2 -->
+
+    <!-- ════════ CONSOMMATION JOURNALIÈRE – PLEINE LARGEUR ════════ -->
+    <div class="card chart-card daily-full">
+      <div class="card-header">
+        <div>
+          <span class="card-title">{{ 'GAZ.DAILY_CONSUMPTION' | translate }}</span>
+          <span class="card-sub">{{ dailyChartSub }}</span>
+        </div>
+        <span class="chart-type-badge bar-badge" *ngIf="hasDailyData">
+          {{ 'ENERGY.BY_METER' | translate }}
+        </span>
+      </div>
+      <div class="card-body daily-canvas-body">
+        <div class="no-data" [hidden]="hasDailyData">{{ 'COMMON.NO_DATA' | translate }}</div>
+        <canvas #gDailyCanvas [hidden]="!hasDailyData"></canvas>
+      </div>
+      <div class="chart-totals" *ngIf="chart">
+        <span class="ct-item gaz-c"><em>Total</em> {{ chartTotalConso }} m³</span>
+        <span class="ct-item orange"><em>CO₂</em> {{ chartTotalCo2 }} kg</span>
+        <span class="ct-item green"><em>Coût</em> {{ chartTotalCost }} TND</span>
+      </div>
+    </div>
+
+  </ng-container>
+
+  <!-- ══ Stats Chart.js ══ -->
+  <div class="stats-section" [hidden]="isLoading">
+    <div class="stats-section-header">
+      <span class="stats-section-title">
+        <svg viewBox="0 0 24 24"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z" fill="currentColor"/></svg>
+        {{ 'ENERGY.STATS_TITLE_PREFIX' | translate }} {{ 'GAZ.PAGE_TITLE' | translate }}
+      </span>
+      <span class="stats-section-sub">{{ summaries.length }} {{ 'ENERGY.METERS_COUNT' | translate }}</span>
+      <button class="aria-insight-btn" (click)="openAriaInsight('stats', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+    </div>
+
+    <div class="stats-charts-grid">
+
+      <!-- 1. Gauge débit moyen -->
+      <div class="card stat-chart-card">
+        <div class="card-header">
+          <div>
+            <span class="card-title">{{ 'GAZ.KPI_DEBIT' | translate }}</span>
+            <span class="card-sub">{{ 'GAZ.KPI_DEBIT_SUB' | translate }}</span>
+          </div>
+          <span class="chart-type-badge donut-badge">{{ 'COMMON.CHART_GAUGE' | translate }}</span>
+        </div>
+        <div class="card-body stat-chart-body" style="position:relative">
+          <canvas #gGaugeCanvas></canvas>
+          <div style="position:absolute;bottom:22%;left:50%;transform:translateX(-50%);text-align:center;pointer-events:none">
+            <div style="font-size:22px;font-weight:700;color:#e6eaf4;font-family:'IBM Plex Mono',monospace">{{ avgDebit.toFixed(2) }}</div>
+            <div style="font-size:10px;color:rgba(230,234,244,0.45);margin-top:2px">L/min</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Évolution consommation → cliquable → modal -->
+      <div class="card stat-chart-card stat-chart-card--clickable" (click)="openChartModal('evolution')">
+        <div class="card-header">
+          <div>
+            <span class="card-title">{{ 'ENERGY.EVOLUTION' | translate }}</span>
+            <span class="card-sub">m³</span>
+          </div>
+          <span class="chart-type-badge line-badge">{{ 'COMMON.CHART_LINE' | translate }}</span>
+        </div>
+        <div class="card-body stat-chart-body">
+          <div class="no-data" [hidden]="chart?.points?.length">{{ 'ENERGY.NO_DATA_CHART' | translate }}</div>
+          <canvas #gLineCanvas></canvas>
+        </div>
+        <div class="chart-click-hint">↗ Agrandir</div>
+      </div>
+
+      <!-- 3. CO₂ & Coût par compteur → cliquable → modal -->
+      <div class="card stat-chart-card stat-chart-card--clickable" (click)="openChartModal('bar')">
+        <div class="card-header">
+          <div><span class="card-title">{{ 'ENERGY.CO2_COST_PER_METER' | translate }}</span></div>
+          <span class="chart-type-badge bar-badge">{{ 'COMMON.CHART_BARS' | translate }}</span>
+        </div>
+        <div class="card-body stat-chart-body">
+          <div class="no-data" [hidden]="summaries.length">{{ 'ENERGY.NO_METER' | translate }}</div>
+          <canvas #gBarCanvas></canvas>
+        </div>
+        <div class="chart-click-hint">↗ Agrandir</div>
+      </div>
+
+      <!-- 4. Répartition donut -->
+      <div class="card stat-chart-card">
+        <div class="card-header">
+          <div>
+            <span class="card-title">{{ 'ENERGY.REPARTITION' | translate }}</span>
+            <span class="card-sub">m³</span>
+          </div>
+          <span class="chart-type-badge donut-badge">{{ 'COMMON.CHART_DONUT' | translate }}</span>
+        </div>
+        <div class="card-body stat-chart-body">
+          <div class="no-data" [hidden]="summaries.length">{{ 'ENERGY.NO_METER' | translate }}</div>
+          <canvas #gDonutCanvas></canvas>
+        </div>
+      </div>
+
+      <!-- 5. Débit min/moy/max -->
+      <div class="card stat-chart-card">
+        <div class="card-header">
+          <div>
+            <span class="card-title">{{ 'GAZ.COL_DEBIT_MIN' | translate }} / {{ 'GAZ.COL_DEBIT_MOY' | translate }} / {{ 'GAZ.COL_DEBIT_MAX' | translate }}</span>
+            <span class="card-sub">{{ 'ENERGY.COMPARATIVE' | translate }}</span>
+          </div>
+          <span class="chart-type-badge line-badge">{{ 'COMMON.CHART_CURVE' | translate }}</span>
+        </div>
+        <div class="card-body stat-chart-body">
+          <div class="no-data" [hidden]="chart?.points?.length">{{ 'ENERGY.NO_DATA_CHART' | translate }}</div>
+          <canvas #gFlowCanvas></canvas>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <ng-container *ngIf="!isLoading">
+
+    <!-- ════════ QUALITY CARD ════════ -->
+    <div class="card quality-card">
+      <div class="card-header">
+        <span class="card-title">{{ 'ENERGY.SUMMARY_BY_METER' | translate }}</span>
+        <span class="card-sub">{{ 'ENERGY.REALTIME_LABEL' | translate }}</span>
+        <button class="aria-insight-btn" (click)="openAriaInsight('quality', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+      </div>
+      <div class="card-body quality-body">
+        <div class="quality-metric">
+          <div class="qm-header">
+            <span>{{ 'GAZ.KPI_DEBIT' | translate }}</span>
+            <span class="val-ok">{{ avgDebit.toFixed(2) }} L/min</span>
+          </div>
+          <div class="quality-bar-bg">
+            <div class="quality-bar-fill bar-ok" [style.width]="debitGaugeWidth"></div>
+          </div>
+          <div class="qm-note">{{ 'GAZ.KPI_DEBIT_SUB' | translate }}</div>
+        </div>
+        <div class="quality-metric">
+          <div class="qm-header">
+            <span>{{ 'GAZ.KPI_LEAKS' | translate }}</span>
+            <span [class.val-ok]="leakCount===0" [class.val-warn]="leakCount>0">{{ leakCount }} {{ 'ENERGY.METERS_COUNT' | translate }}</span>
+          </div>
+          <div class="quality-bar-bg">
+            <div class="quality-bar-fill" [style.width]="leakGaugeWidth"
+                 [class.bar-ok]="leakCount===0" [class.bar-warn]="leakCount>0"></div>
+          </div>
+          <div class="qm-note">{{ leakCount === 0 ? ('GAZ.LEAKS_OK' | translate) : ('GAZ.LEAKS_WARN' | translate) }}</div>
+        </div>
+        <div class="quality-metric" *ngIf="summaries.length">
+          <div class="qm-header"><span>{{ 'ENERGY.SUMMARY_BY_METER' | translate }}</span></div>
+          <div class="dev-summary-list">
+            <div class="dev-row" *ngFor="let s of summaries">
+              <span class="dev-id">#{{ s.idDevice }}</span>
+              <span class="dev-kwh">{{ (s.totalConsoM / 1000).toFixed(2) }} m³</span>
+              <span class="dev-co2">{{ (s.co2Kg ?? 0).toFixed(1) }} kg</span>
+              <span class="dev-status" [ngClass]="s.alertCount > 0 ? 'status-alert' : 'status-ok'">{{ s.alertCount > 0 ? 'ALERTE' : 'OK' }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ RT TABLE ════════ -->
+    <div class="card rt-card" *ngIf="rtData.length">
+      <div class="card-header">
+        <span class="card-title">{{ 'GAZ.REALTIME' | translate }}</span>
+        <span class="card-sub">{{ rtData.length }} {{ 'ENERGY.ACTIVE_METERS' | translate }}</span>
+      </div>
+      <div class="card-body table-body">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>{{ 'GAZ.COL_DEVICE' | translate }}</th>
+                <th>{{ 'GAZ.COL_INDEX' | translate }}</th>
+                <th>{{ 'GAZ.COL_DEBIT_MIN' | translate }}</th>
+                <th>{{ 'GAZ.COL_DEBIT_MOY' | translate }}</th>
+                <th>{{ 'GAZ.COL_DEBIT_MAX' | translate }}</th>
+                <th>{{ 'GAZ.COL_LEAK' | translate }}</th>
+                <th>{{ 'GAZ.COL_FRAUD' | translate }}</th>
+                <th>{{ 'GAZ.COL_BATTERY' | translate }}</th>
+                <th>{{ 'GAZ.COL_STATUS' | translate }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let rt of rtForTable">
+                <td class="cell-id">#{{ rt.idDevice }}</td>
+                <td>{{ rt.index | number:'1.0-0' }}</td>
+                <td>{{ rt.minDebitPerMin.toFixed(2) }}</td>
+                <td>{{ rt.avgDebitPerMin.toFixed(2) }}</td>
+                <td>{{ rt.maxDebitPerMin.toFixed(2) }}</td>
+                <td>
+                  <span class="flag-badge" [class.flag-on]="rt.leak > 0">
+                    {{ rt.leak > 0 ? ('ENERGY.FLAG_YES' | translate) : ('ENERGY.FLAG_NO' | translate) }}
+                  </span>
+                </td>
+                <td>
+                  <span class="flag-badge" [class.flag-on]="rt.fraud > 0">
+                    {{ rt.fraud > 0 ? ('ENERGY.FLAG_YES' | translate) : ('ENERGY.FLAG_NO' | translate) }}
+                  </span>
+                </td>
+                <td>
+                  <div class="batt-bar">
+                    <div class="batt-fill" [style.width]="(rt.batteryLevel ?? 0) + '%'"
+                         [class.batt-ok]="(rt.batteryLevel ?? 0) > 40"
+                         [class.batt-warn]="(rt.batteryLevel ?? 0) <= 40 && (rt.batteryLevel ?? 0) > 15"
+                         [class.batt-low]="(rt.batteryLevel ?? 0) <= 15"></div>
+                  </div>
+                  <span class="batt-label">{{ rt.batteryLevel ?? '—' }}%</span>
+                </td>
+                <td><span class="status-badge" [ngClass]="statusClass(rt.status)">{{ rt.status }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ ALERTS ════════ -->
+    <div class="card alerts-card">
+      <div class="card-header">
+        <span class="card-title">{{ 'GAZ.ACTIVE_ALERTS' | translate }}</span>
+        <div class="alert-counts">
+          <span class="ac-badge critical">{{ countBySeverity('CRITICAL') }} {{ 'ENERGY.CRITICAL_LABEL' | translate }}</span>
+          <span class="ac-badge high">{{ countBySeverity('HIGH') }} {{ 'ENERGY.HIGH_LABEL' | translate }}</span>
+          <span class="ac-badge low">{{ countBySeverity('LOW') }} {{ 'ENERGY.LOW_LABEL' | translate }}</span>
+        </div>
+        <button class="aria-insight-btn" (click)="openAriaInsight('alerts', $event)" title="Analyser avec ARIA"><span>✦</span> ARIA</button>
+      </div>
+      <div class="card-body">
+        <div class="no-alerts" *ngIf="!alerts.length">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L21 8l-9 9z"/></svg>
+          {{ 'GAZ.NO_ALERTS' | translate }}
+        </div>
+        <div class="alert-row" *ngFor="let a of alerts" [ngClass]="alertClass(a.severity)">
+          <div class="alert-icon">{{ alertIcon(a.type) }}</div>
+          <div class="alert-body">
+            <div class="alert-top">
+              <span class="alert-device">{{ 'KPI_PANEL.DEVICE_PREFIX' | translate }}{{ a.idDevice }}</span>
+              <span class="alert-sev" [ngClass]="'sev-'+a.severity.toLowerCase()">{{ a.severity }}</span>
+              <span class="alert-time">{{ fmtAlertDate(a.date) }}</span>
+            </div>
+            <div class="alert-message">{{ a.message }}</div>
+            <div class="alert-rec">💡 {{ recommendation(a.type) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </ng-container>
+
+  <ng-template #loadingTpl>
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <span>{{ 'GAZ.LOADING' | translate }}</span>
+    </div>
+  </ng-template>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MODAL CHART — Évolution & CO₂/Coût
+  ══════════════════════════════════════════════════════════════════ -->
+  <div class="gaz-chart-modal-backdrop"
+       [class.open]="chartModalOpen"
+       (click)="handleChartModalBackdrop($event)">
+    <div class="gaz-chart-modal" (click)="$event.stopPropagation()">
+
+      <!-- Header -->
+      <div class="ecm-header">
+        <div class="ecm-title-block">
+          <span class="ecm-badge">{{ chartModalType === 'evolution' ? ('COMMON.CHART_LINE' | translate) : ('COMMON.CHART_BARS' | translate) }}</span>
+          <h2 class="ecm-title">{{ chartModalTitle }}</h2>
+        </div>
+        <button class="ecm-close" (click)="closeChartModal()">✕</button>
+      </div>
+
+      <!-- KPI summary row inside modal -->
+      <div class="ecm-kpi-row">
+        <div class="ecm-kpi-chip" *ngIf="chartModalType === 'evolution'">
+          <span class="ecm-kv">{{ chartTotalConso }} m³</span>
+          <span class="ecm-kl">Total période</span>
+        </div>
+        <div class="ecm-kpi-chip" *ngIf="chartModalType === 'evolution'">
+          <span class="ecm-kv" style="color:#f59e0b">{{ chartTotalCo2 }} kg</span>
+          <span class="ecm-kl">CO₂ émis</span>
+        </div>
+        <div class="ecm-kpi-chip" *ngIf="chartModalType === 'evolution'">
+          <span class="ecm-kv" style="color:#2ecc71">{{ chartTotalCost }} TND</span>
+          <span class="ecm-kl">Coût total</span>
+        </div>
+        <div class="ecm-kpi-chip" *ngIf="chartModalType === 'bar'">
+          <span class="ecm-kv">{{ summaries.length }}</span>
+          <span class="ecm-kl">{{ 'COMMON.METERS_LABEL' | translate }}</span>
+        </div>
+        <div class="ecm-kpi-chip" *ngIf="chartModalType === 'bar'">
+          <span class="ecm-kv" style="color:#f59e0b">{{ fmt(totalCo2, 1) }} kg</span>
+          <span class="ecm-kl">CO₂ total</span>
+        </div>
+        <div class="ecm-kpi-chip" *ngIf="chartModalType === 'bar'">
+          <span class="ecm-kv" style="color:#2ecc71">{{ fmt(totalCost, 2) }} TND</span>
+          <span class="ecm-kl">Coût total</span>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="ecm-chart-wrap">
+        <canvas #modalChartCanvas></canvas>
+      </div>
+
+      <!-- Footer -->
+      <div class="ecm-footer">
+        <span class="ecm-hint">
+          <span *ngIf="chartModalType==='evolution'">Cliquez sur un point pour le détail</span>
+          <span *ngIf="chartModalType==='bar'">Survolez une barre pour les détails par compteur</span>
+        </span>
+      </div>
+
+    </div>
+  </div>
+
+</div>

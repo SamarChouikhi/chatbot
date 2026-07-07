@@ -1,0 +1,114 @@
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="dyn-form" novalidate>
+
+  <!-- ══ MODE SIMPLE (FormGroup direct) ══════════════════════════════════════ -->
+  <ng-container *ngIf="!repeatable">
+    <div class="dyn-grid">
+      <ng-container *ngFor="let f of fields">
+        <div class="dyn-field" [class.dyn-field--full]="f.width === 'full'">
+
+          <label class="dyn-label">
+            {{ f.label | translate }}
+            <span *ngIf="f.required" class="dyn-req">*</span>
+          </label>
+
+          <ng-container [ngSwitch]="f.type">
+            <input *ngSwitchCase="'text'"     type="text"     class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [class.err]="isInvalid(f.key)">
+            <input *ngSwitchCase="'password'" type="password" class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [class.err]="isInvalid(f.key)">
+            <input *ngSwitchCase="'email'"    type="email"    class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [class.err]="isInvalid(f.key)">
+            <input *ngSwitchCase="'number'"   type="number"   class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [min]="f.min ?? null" [max]="f.max ?? null" [class.err]="isInvalid(f.key)">
+            <input *ngSwitchCase="'date'"     type="date"     class="dyn-input" [formControlName]="f.key" [class.err]="isInvalid(f.key)">
+
+            <textarea *ngSwitchCase="'textarea'"
+              class="dyn-input dyn-textarea"
+              [formControlName]="f.key"
+              [placeholder]="f.placeholder ? (f.placeholder | translate) : ''"
+              [class.err]="isInvalid(f.key)"
+              rows="3">
+            </textarea>
+
+            <select *ngSwitchCase="'select'" class="dyn-input dyn-select" [formControlName]="f.key" [class.err]="isInvalid(f.key)">
+              <option value="">{{ 'FORMS.CHOOSE_OPTION' | translate }}</option>
+              <option *ngFor="let opt of f.options" [value]="opt.value">{{ opt.label | translate }}</option>
+            </select>
+
+            <label *ngSwitchCase="'checkbox'" class="dyn-check">
+              <input type="checkbox" [formControlName]="f.key">
+              <span>{{ f.placeholder ? (f.placeholder | translate) : '' }}</span>
+            </label>
+          </ng-container>
+
+          <span *ngIf="isInvalid(f.key)" class="dyn-err">{{ errMsg(f.key) }}</span>
+          <span *ngIf="f.hint && !isInvalid(f.key)" class="dyn-hint">{{ f.hint | translate }}</span>
+        </div>
+      </ng-container>
+    </div>
+  </ng-container>
+
+  <!-- ══ MODE RÉPÉTABLE (FormArray) ══════════════════════════════════════════ -->
+  <ng-container *ngIf="repeatable" formArrayName="rows">
+
+    <div *ngFor="let row of rows.controls; let i = index" [formGroupName]="i" class="dyn-row">
+
+      <span class="dyn-row-num">{{ i + 1 }}</span>
+
+      <div class="dyn-grid dyn-grid--row">
+        <ng-container *ngFor="let f of fields">
+          <div class="dyn-field" [class.dyn-field--full]="f.width === 'full'">
+
+            <label class="dyn-label">
+              {{ f.label | translate }}
+              <span *ngIf="f.required" class="dyn-req">*</span>
+            </label>
+
+            <ng-container [ngSwitch]="f.type">
+              <input *ngSwitchCase="'text'"     type="text"     class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [class.err]="isInvalid(f.key, i)">
+              <input *ngSwitchCase="'password'" type="password" class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [class.err]="isInvalid(f.key, i)">
+              <input *ngSwitchCase="'email'"    type="email"    class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [class.err]="isInvalid(f.key, i)">
+              <input *ngSwitchCase="'number'"   type="number"   class="dyn-input" [formControlName]="f.key" [placeholder]="f.placeholder ? (f.placeholder | translate) : ''" [min]="f.min ?? null" [max]="f.max ?? null" [class.err]="isInvalid(f.key, i)">
+              <input *ngSwitchCase="'date'"     type="date"     class="dyn-input" [formControlName]="f.key" [class.err]="isInvalid(f.key, i)">
+
+              <textarea *ngSwitchCase="'textarea'"
+                class="dyn-input dyn-textarea"
+                [formControlName]="f.key"
+                [placeholder]="f.placeholder ? (f.placeholder | translate) : ''"
+                [class.err]="isInvalid(f.key, i)"
+                rows="2">
+              </textarea>
+
+              <select *ngSwitchCase="'select'" class="dyn-input dyn-select" [formControlName]="f.key" [class.err]="isInvalid(f.key, i)">
+                <option value="">{{ 'FORMS.CHOOSE_OPTION' | translate }}</option>
+                <option *ngFor="let opt of f.options" [value]="opt.value">{{ opt.label | translate }}</option>
+              </select>
+
+              <label *ngSwitchCase="'checkbox'" class="dyn-check">
+                <input type="checkbox" [formControlName]="f.key">
+                <span>{{ f.placeholder ? (f.placeholder | translate) : '' }}</span>
+              </label>
+            </ng-container>
+
+            <span *ngIf="isInvalid(f.key, i)" class="dyn-err">{{ errMsg(f.key, i) }}</span>
+          </div>
+        </ng-container>
+      </div>
+
+      <button type="button" class="dyn-btn-rm" (click)="removeRow(i)" [disabled]="rows.length === 1" [title]="'COMMON.DELETE' | translate">✕</button>
+    </div>
+
+    <button type="button" class="dyn-btn-add" (click)="addRow()">
+      {{ 'FORMS.ADD_ROW' | translate }}
+    </button>
+
+  </ng-container>
+
+  <!-- ══ ACTIONS ═════════════════════════════════════════════════════════════ -->
+  <div class="dyn-actions">
+    <button *ngIf="showCancel" type="button" class="dyn-btn dyn-btn--cancel" (click)="onCancel()">
+      {{ 'COMMON.CANCEL' | translate }}
+    </button>
+    <button type="submit" class="dyn-btn dyn-btn--submit" [disabled]="loading">
+      <span *ngIf="loading" class="dyn-spinner"></span>
+      {{ loading ? ('COMMON.LOADING' | translate) : (submitLabel | translate) }}
+    </button>
+  </div>
+
+</form>

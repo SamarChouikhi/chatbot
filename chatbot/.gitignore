@@ -1,0 +1,50 @@
+.claude/
+
+# See http://help.github.com/ignore-files/ for more about ignoring files.
+/backbws/Dump20260410 (1)
+data_seed.sql
+/backbws/*.sql
+/ioitfr/CORRECTIONS_CSS.md
+# Compiled output
+/ioitfr/dist
+/ioitfr/tmp
+/ioitfr/out-tsc
+/ioitfr/bazel-out
+
+# Node
+/ioitfr/node_modules
+/ioitfr/npm-debug.log
+/ioitfr/yarn-error.log
+
+# IDEs and editors
+/ioitfr/.idea/
+/ioitfr/.project
+/ioitfr/.classpath
+/ioitfr/.c9/
+/ioitfr/*.launch
+/ioitfr/.settings/
+/ioitfr/*.sublime-workspace
+
+# Visual Studio Code
+/ioitfr/.vscode/*
+/ioitfr/!.vscode/settings.json
+/ioitfr/!.vscode/tasks.json
+/ioitfr/!.vscode/launch.json
+/ioitfr/!.vscode/extensions.json
+/ioitfr/.history/*
+
+# Miscellaneous
+/ioitfr/.angular/cache
+/ioitfr/.sass-cache/
+/ioitfr/connect.lock
+/ioitfr/coverage
+/ioitfr/libpeerconnection.log
+/ioitfr/testem.log
+/ioitfr/typings
+
+# System files
+/ioitfr/.DS_Store
+/ioitfr/Thumbs.db
+/ioitfr/.amazonq
+
+/bws_pfe/__pycache__

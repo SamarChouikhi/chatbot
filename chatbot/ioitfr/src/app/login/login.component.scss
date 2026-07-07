@@ -1,0 +1,355 @@
+// ===================================
+// DESIGN SYSTEM — PREMIUM B2B
+// ===================================
+
+$white: #ffffff;
+$black: #000000;
+$primary-blue: #0052ff;
+$primary-blue-dark: #003ecb;
+$accent-blue: #4da3ff;
+$success-green: #2ecc71;
+$error-red: #e74c3c;
+$dark-overlay-start: rgba(8, 18, 40, 0.92);
+$dark-overlay-end: rgba(0, 60, 180, 0.75);
+$font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+$spacing-2: 0.5rem;
+$spacing-3: 0.75rem;
+$spacing-4: 1rem;
+$spacing-5: 1.25rem;
+$spacing-6: 1.5rem;
+$spacing-8: 2rem;
+$spacing-12: 3rem;
+$spacing-16: 4rem;
+
+$border-radius-md: 0.5rem;
+$border-radius-lg: 0.9rem;
+$transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+
+// ===================================
+// CONTAINER
+// ===================================
+
+.login-container {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;           // ← garde le overflow:hidden
+  font-family: $font-primary;
+}
+
+.login-background {
+  position: absolute;
+  inset: 0;
+  background-image: url('/assets/image1.png');
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, $dark-overlay-start 0%, $dark-overlay-end 100%);
+  z-index: 1;
+}
+
+// ===================================
+// LOGO EN HAUT À GAUCHE
+// ===================================
+
+.login-header {
+  position: absolute;
+  top: 1.5rem;
+  left: 2rem;
+  right: 2rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: auto;
+
+  @media (max-width: 768px) {
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+  }
+}
+
+// ===================================
+// LANGUAGE SWITCHER
+// ===================================
+
+.lang-switcher {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 3px;
+  backdrop-filter: blur(8px);
+}
+
+.lang-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 4px 9px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+  }
+
+  &.active {
+    background: $primary-blue;
+    color: #fff;
+  }
+}
+
+.brand-logo {
+  width: 150px;
+  height: auto;
+  display: block;
+  opacity: 0.95;
+}
+
+// ===================================
+// LAYOUT
+// ===================================
+
+.login-content {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  max-width: 1200px;
+  gap: $spacing-16;
+  padding: $spacing-8;
+  box-sizing: border-box;    // ← évite le débordement horizontal
+
+  @media (max-width: 968px) {
+    grid-template-columns: 1fr;
+    max-width: 500px;
+  }
+}
+
+// ===================================
+// WELCOME SECTION
+// ===================================
+
+.welcome-section {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: $spacing-6;
+  color: $white;
+}
+
+.welcome-title {
+  font-size: 3.2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+// ===================================
+// SIGNIN SECTION
+// ===================================
+
+.signin-section {
+  padding: $spacing-8;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-6;
+}
+
+.signin-title {
+  font-size: 2rem;
+  font-weight: 600;
+  color: $white;
+}
+
+// ===================================
+// FORM
+// ===================================
+
+.signin-form {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-5;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-2;
+
+  label {
+    font-size: 0.85rem;
+    color: rgba($white, 0.85);
+    font-weight: 500;
+  }
+
+  input {
+    width: 100%;
+    height: 50px;
+    padding: 0 $spacing-4;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: $border-radius-md;
+    font-size: 0.95rem;
+    color: $white;
+    transition: all $transition-base;
+    box-sizing: border-box;
+
+    &::placeholder {
+      color: rgba(255, 255, 255, 0.45);
+    }
+
+    &:focus {
+      outline: none;
+      border-color: $accent-blue;
+      background: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 0 0 3px rgba($accent-blue, 0.25);
+    }
+
+    &.error {
+      border-color: $error-red;
+      background: rgba($error-red, 0.1);
+    }
+  }
+
+  .error-message {
+    font-size: 0.8rem;
+    color: $error-red;
+  }
+}
+
+// ===================================
+// PASSWORD WRAPPER
+// ===================================
+
+.password-wrapper {
+  position: relative;
+
+  input {
+    padding-right: 3rem;
+  }
+}
+
+.password-toggle {
+  position: absolute;
+  right: $spacing-3;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+}
+
+// ===================================
+// REMEMBER ME
+// ===================================
+
+.remember-me {
+  display: flex;
+  align-items: center;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: $spacing-2;
+  color: rgba($white, 0.8);
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    width: auto;
+    height: auto;
+    accent-color: $primary-blue;
+  }
+}
+
+// ===================================
+// ALERT
+// ===================================
+
+.alert-error {
+  padding: $spacing-3 $spacing-4;
+  background: rgba($error-red, 0.15);
+  border: 1px solid rgba($error-red, 0.4);
+  border-radius: $border-radius-md;
+  color: $error-red;
+  font-size: 0.875rem;
+}
+
+.error-text {
+  font-size: 0.8rem;
+  color: $error-red;
+}
+
+// ===================================
+// PRIMARY BUTTON
+// ===================================
+
+.btn-signin {
+  width: 100%;
+  height: 54px;
+  background: $primary-blue;
+  color: $white;
+  border: none;
+  border-radius: $border-radius-md;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all $transition-base;
+  box-shadow: 0 6px 18px rgba($primary-blue, 0.35);
+  margin-top: $spacing-3;
+
+  &:hover:not(:disabled) {
+    background: $primary-blue-dark;
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba($primary-blue, 0.45);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+// ===================================
+// SECONDARY TEXT
+// ===================================
+
+.lost-password,
+.terms-text {
+  font-size: 0.8rem;
+  color: rgba($white, 0.6);
+
+  a {
+    color: $white;
+    text-decoration: underline;
+  }
+}

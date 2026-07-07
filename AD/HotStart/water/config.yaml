@@ -1,0 +1,154 @@
+
+
+# ── Données ─────────────────────────────────────────────────────────────────
+donnees:
+
+  # Chemin vers le fichier CSV des consommations eau
+  fichier: "C:/Users/LEGION/Downloads/comdemo_water.csv"
+
+  # Dossier de sortie : résultats CSV + graphiques
+  dossier_resultats: "outputs/water"
+
+  # ── Filtre de période (optionnel) ─────────────────────────────────────────
+  # FORMAT : "YYYY-MM-DD"   |   Décommenter UNE seule paire pour tester.
+  # Laisser TOUT commenté → historique COMPLET analysé.
+  #
+  #  TEST 1 semaine  : date_debut: "2025-03-01"   date_fin: "2025-03-07"
+  #  TEST 1 mois     : date_debut: "2025-03-01"   date_fin: "2025-03-31"
+  #  TEST 3 mois     : date_debut: "2025-01-01"   date_fin: "2025-03-31"
+  #  HISTORIQUE COMPLET → tout laisser commenté (comportement par défaut)
+  #
+  #date_debut: "2025-01-01"
+  #date_fin:   "2025-06-30"
+
+
+# ── Colonnes à analyser ──────────────────────────────────────────────────────
+detection:
+
+  # Colonnes sur lesquelles détecter des anomalies.
+  # Anomalie globale si au moins min_features_anomalous colonnes sortent de leur intervalle.
+  colonnes:
+    - conso
+
+  min_features_anomalous: 1
+
+
+# ── Modèle de prédiction (Chronos) ──────────────────────────────────────────
+modele:
+
+  # Nombre d'heures d'historique passées au modèle pour chaque prédiction
+  historique_heures: 504
+
+  # Nombre d'heures à prédire par fenêtre.
+  # IMPORTANT : doit être égal à pas_glissement pour une couverture 100%.
+  prediction_heures: 24
+
+  # Modèle Chronos
+  nom: "amazon/chronos-2"
+
+  # Accélérateur de calcul
+  accelerateur: "cuda"
+
+  # Nombre d'échantillons Monte-Carlo
+  num_echantillons: 50
+
+
+# ── Seuil de détection ───────────────────────────────────────────────────────
+seuil:
+
+  # Stratégie : "sigma" (recommandé) | "adaptive" | "fixed"
+  strategie: "sigma"
+
+  # Écarts-types pour la bande historique
+  k_sigma: 2.5
+
+  alpha: 0.5
+  max_facteur_volatilite: 2.0
+
+  # Percentiles de l'intervalle de prévision Chronos
+  percentile_bas:  0.10
+  percentile_haut: 0.90
+
+
+# ── Paramètres avancés ───────────────────────────────────────────────────────
+avance:
+
+  frequence: "1h"
+  limite_completion: 3
+
+  # Pas de glissement = prediction_heures → couverture 100%, zéro trou
+  pas_glissement: 24
+
+  # Zoom sur la pire anomalie
+  zoom_heures: 168
+
+  # Run continu > seuil → is_regime_change
+  seuil_regime_heures: 48
+
+  # Devices avec moins de N lignes brutes → exclus avant détection (ex. device 1533 = 1 ligne)
+  min_lignes_device: 48
+
+  # Devices avec un taux de zéros (offline) supérieur à ce seuil → exclus
+  # Calibré sur les données : 1004 (99.9%), 1170 (99.8%), 3007 (99.9%), 3789 (100%)
+  max_pct_offline: 0.90
+
+  # Détection rollover compteur : valeur > Q3_trim + N×IQR_trim → NaN + interpolation
+  # Q3/IQR calculés sur valeurs non-nulles hors top-5% (robuste aux rollovers)
+  # Valeur 30 calibrée sur les données : catch 1568 (24M), 1501 (336k), 3027 (516k)
+  facteur_rollover: 30.0
+
+
+# ── Prévision préventive ─────────────────────────────────────────────────────
+prevision:
+
+  # Horizon de prévision (7 jours avec 30 jours de contexte = fiable)
+  horizon_heures: 168
+
+  confiance_min: 0.3
+
+
+# ── Retraining mensuel (M1 → M12) ───────────────────────────────────────────
+retraining:
+
+  actif: true
+  epochs: 3
+  taux_apprentissage: 0.0001
+  dossier_checkpoints: "outputs/water/checkpoints"
+  fichier_etat: "outputs/water/retrain_state.json"
+
+
+# ── Calibration adaptative ────────────────────────────────────────────────────
+#
+#  Phase 1 — Calibration (hot start)
+#    Chronos prédit sur les `heures` premières heures de chaque device.
+#    La distribution des erreurs |réel − pred_median| est calculée et stockée
+#    dans device_profiles.json : mean_err, std_err, p95, p99.
+#
+#  Phase 2 — Détection
+#    Seuil = profil.p99 × facteur_seuil  (adapté à chaque device).
+#    Anomalie si |réel − pred_median| > seuil.
+#
+#  Phase 3 — Drift (recalibration auto)
+#    Après chaque run, les erreurs récentes sont comparées au profil.
+#    Un z-score > seuil_drift_z déclenche la mise à jour du profil.
+#
+calibration:
+
+  # Active la calibration adaptative (false → retour au k_sigma global)
+  active: true
+
+  # Heures de données "normales" utilisées pour la phase de calibration
+  # Doit être >= prediction_heures × 3
+  # Recommandé : 1440 (60 jours) à 2160 (90 jours)
+  heures: 1440
+
+  # Multiplicateur appliqué à p99 pour obtenir le seuil final
+  # 1.0 = p99 exact | 1.2 = 20% de marge supplémentaire
+  facteur_seuil: 1.0
+
+  # Z-score minimum pour déclarer un drift (test unilatéral)
+  # 3.0 = drift très significatif | 2.0 = plus sensible
+  seuil_drift_z: 3.0
+
+  # Forcer la recalibration même si un profil existe déjà
+  force: false

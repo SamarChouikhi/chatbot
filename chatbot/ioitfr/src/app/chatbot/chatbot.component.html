@@ -1,0 +1,838 @@
+<!-- ============================================================ -->
+<!-- CHATBOT COMPONENT — HTML FINAL (sidebar style Claude)       -->
+<!-- ============================================================ -->
+
+<!-- ── Bouton flottant ── -->
+<button
+  class="chat-toggle-button"
+  (click)="toggleChat()"
+  [class.active]="isOpen"
+  *ngIf="!isDashboardMode"
+  [attr.aria-label]="isOpen ? ('CHATBOT.CLOSE' | translate) : ('CHATBOT.OPEN' | translate)"
+  [attr.aria-expanded]="isOpen"
+>
+  <!-- État FERMÉ : icône animée innovante -->
+  <ng-container *ngIf="!isOpen">
+    <div class="toggle-orb">
+      <div class="orb-core">
+        <span class="orb-label-center">IA</span>
+      </div>
+      <div class="orb-ring r1"></div>
+      <div class="orb-ring r2"></div>
+    </div>
+    <!-- Floaters autour du bouton -->
+    <span class="btn-floater f1">👋</span>
+    
+  </ng-container>
+
+  <!-- État OUVERT : croix simple -->
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" *ngIf="isOpen" aria-hidden="true"
+       style="width:17px;height:17px;">
+    <path d="M18 6L6 18M6 6l12 12"/>
+  </svg>
+
+  <span class="notification-badge" *ngIf="unreadCount > 0" aria-live="polite">
+    {{ unreadCount > 99 ? '99+' : unreadCount }}
+  </span>
+</button>
+
+<!-- ── Shell principal ── -->
+<div
+  class="chatbot-shell"
+  [class.open]="isOpen || isDashboardMode"
+  [class.dashboard-mode]="isDashboardMode"
+  [class.fullscreen]="isFullscreen && !isDashboardMode"
+  [class.light]="!isDarkMode"
+  role="dialog"
+  aria-labelledby="chat-title"
+  [attr.aria-hidden]="!isOpen && !isDashboardMode"
+  (click)="closeMenu()"
+>
+
+  <!-- ════════════════════════════════════════
+       SIDEBAR — style Claude
+  ════════════════════════════════════════ -->
+  <aside
+    class="history-sidebar"
+    [class.visible]="isHistoryOpen"
+    [attr.aria-label]="'CHATBOT.HISTORY_ARIA' | translate"
+  >
+
+    <!-- Navigation principale -->
+    <nav class="sidebar-nav" [attr.aria-label]="'CHATBOT.MAIN_NAV_ARIA' | translate">
+
+      <button class="sidebar-nav-btn new-conv" (click)="newConversation()"
+              [attr.aria-label]="'CHATBOT.NEW_CONV' | translate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        {{ 'CHATBOT.NEW_CONV' | translate }}
+      </button>
+
+      <button class="sidebar-nav-btn" (click)="toggleSearch()"
+              [class.active]="showSearch" [attr.aria-label]="'CHATBOT.SEARCH' | translate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="6"/>
+          <path d="M20 20l-3-3"/>
+        </svg>
+        {{ 'CHATBOT.SEARCH' | translate }}
+      </button>
+
+    </nav>
+
+    <!-- Barre de recherche -->
+    <div class="search-wrapper" *ngIf="showSearch" role="search">
+      <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+      </svg>
+      <input
+        class="search-input"
+        type="search"
+        [(ngModel)]="historySearchQuery"
+        [placeholder]="'CHATBOT.SEARCH_PLACEHOLDER' | translate"
+        (input)="filterHistory()"
+        [attr.aria-label]="'CHATBOT.SEARCH_ARIA' | translate"
+        autocomplete="off"
+      />
+      <button class="search-clear" *ngIf="historySearchQuery"
+              (click)="clearHistorySearch()" [attr.aria-label]="'CHATBOT.CLEAR_SEARCH_ARIA' | translate">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Liste des sessions groupées -->
+    <div class="session-list" role="list">
+
+      <!-- Favoris -->
+      <ng-container *ngIf="getGroupedSessions('favorites').length > 0">
+        <div class="group-label favorites-label" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" stroke-width="1.5">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+          {{ 'CHATBOT.FAVORITES' | translate }}
+        </div>
+        <ng-container *ngTemplateOutlet="sessionItems; context: { sessions: getGroupedSessions('favorites') }">
+        </ng-container>
+      </ng-container>
+
+      <ng-container *ngIf="getGroupedSessions('today').length > 0">
+        <div class="group-label" aria-hidden="true">{{ 'CHATBOT.TODAY' | translate }}</div>
+        <ng-container *ngTemplateOutlet="sessionItems; context: { sessions: getGroupedSessions('today') }">
+        </ng-container>
+      </ng-container>
+
+      <ng-container *ngIf="getGroupedSessions('week').length > 0">
+        <div class="group-label" aria-hidden="true">{{ 'CHATBOT.THIS_WEEK' | translate }}</div>
+        <ng-container *ngTemplateOutlet="sessionItems; context: { sessions: getGroupedSessions('week') }">
+        </ng-container>
+      </ng-container>
+
+      <ng-container *ngIf="getGroupedSessions('month').length > 0">
+        <div class="group-label" aria-hidden="true">{{ 'CHATBOT.THIS_MONTH' | translate }}</div>
+        <ng-container *ngTemplateOutlet="sessionItems; context: { sessions: getGroupedSessions('month') }">
+        </ng-container>
+      </ng-container>
+
+      <!-- État vide -->
+      <div class="empty-state" *ngIf="filteredSessions.length === 0" aria-live="polite">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"
+             aria-hidden="true">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <p>{{ historySearchQuery
+               ? ('CHATBOT.NO_RESULTS' | translate:{ q: historySearchQuery })
+               : ('CHATBOT.NO_CONVERSATIONS' | translate) }}</p>
+      </div>
+
+    </div>
+
+    <!-- Footer utilisateur -->
+    <div class="sidebar-footer">
+      <button class="user-account-btn" [attr.aria-label]="'CHATBOT.ACCOUNT_SETTINGS_ARIA' | translate">
+        <div class="user-avatar" aria-hidden="true">{{ userInitials }}</div>
+        <div class="user-info">
+          <div class="user-name">{{ userFullName }}</div>
+        </div>
+        <div class="user-chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- ✅ Template réutilisable pour les items de session -->
+  <ng-template #sessionItems let-sessions="sessions">
+    <div
+      class="session-item"
+      *ngFor="let session of sessions; trackBy: trackBySession"
+      [class.active]="session.id === activeSessionId"
+      (click)="loadSession(session)"
+      role="listitem"
+      [attr.aria-current]="session.id === activeSessionId ? 'true' : null"
+      [attr.aria-label]="session.title"
+    >
+      <div class="session-body">
+        <input
+          *ngIf="editingSessionId === session.id"
+          [id]="'rename-input-' + session.id"
+          class="rename-input"
+          [(ngModel)]="editingTitle"
+          (blur)="confirmRename(session)"
+          (keydown.enter)="confirmRename(session)"
+          (keydown.escape)="cancelRename()"
+          (click)="$event.stopPropagation()"
+        />
+        <span
+          *ngIf="editingSessionId !== session.id"
+          class="session-title"
+          (dblclick)="startRenameSession($event, session)"
+          [title]="'CHATBOT.RENAME_HINT' | translate"
+        >{{ session.title }}</span>
+      </div>
+      <div class="session-meta">
+        <button
+          class="session-dots"
+          (click)="toggleMenu($event, session.id)"
+          [attr.aria-label]="('CHATBOT.SESSION_OPTIONS' | translate) + ' ' + session.title"
+          title="Options"
+        >···</button>
+        <div class="session-menu" *ngIf="openMenuId === session.id" (click)="$event.stopPropagation()">
+          <button class="session-menu-item" (click)="renameFromMenu($event, session)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+            {{ 'CHATBOT.RENAME' | translate }}
+          </button>
+          <button class="session-menu-item" (click)="toggleFavorite($event, session)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+                 [style.fill]="isFavorite(session.id) ? '#f59e0b' : 'none'"
+                 [style.stroke]="isFavorite(session.id) ? '#f59e0b' : 'currentColor'">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+            </svg>
+            {{ isFavorite(session.id) ? ('CHATBOT.REMOVE_FAVORITE' | translate) : ('CHATBOT.ADD_FAVORITE' | translate) }}
+          </button>
+          <div class="session-menu-divider"></div>
+          <button class="session-menu-item danger" (click)="deleteFromMenu($event, session)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+              <path d="M10 11v6M14 11v6"/>
+              <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            </svg>
+            {{ 'CHATBOT.DELETE' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </ng-template>
+
+  <!-- ════════════════════════════════════════
+       PANNEAU CHAT
+  ════════════════════════════════════════ -->
+  <div class="chat-panel" role="main">
+
+    <!-- Header -->
+    <div class="chat-header">
+      <div class="header-left">
+
+        <!-- Hamburger : ouvre/ferme la sidebar en va-et-vient -->
+        <button
+          class="sidebar-toggle-btn"
+          (click)="toggleHistory()"
+          [title]="isHistoryOpen ? ('CHATBOT.SIDEBAR_CLOSE' | translate) : ('CHATBOT.SIDEBAR_OPEN' | translate)"
+          [attr.aria-label]="isHistoryOpen ? ('CHATBOT.SIDEBAR_CLOSE' | translate) : ('CHATBOT.SIDEBAR_OPEN' | translate)"
+          [attr.aria-expanded]="isHistoryOpen"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+
+        <div class="bot-info">
+          <h4 id="chat-title" class="bot-name">ARIA IOIT</h4>
+          <div class="bot-status" aria-live="polite">
+            <span class="status-pulse" aria-hidden="true"></span>
+            <span>{{ 'CHATBOT.STATUS_ONLINE' | translate }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-right">
+
+        <!-- Chip session active -->
+        <div class="active-session-chip"
+             *ngIf="currentSessionTitle"
+             [title]="currentSessionTitle"
+             [attr.aria-label]="('CHATBOT.ACTIVE_CONV_ARIA' | translate) + ' ' + currentSessionTitle">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
+          </svg>
+          <span>{{ currentSessionTitle }}</span>
+        </div>
+
+        <!-- Groupe boutons style barre de titre -->
+        <div class="winbtns-group" *ngIf="!isDashboardMode">
+          <button class="winbtn winbtn-max" (click)="toggleFullscreen()"
+                  [title]="isFullscreen ? ('CHATBOT.RESTORE' | translate) : ('CHATBOT.MAXIMIZE' | translate)"
+                  [attr.aria-label]="isFullscreen ? ('CHATBOT.RESTORE' | translate) : ('CHATBOT.MAXIMIZE' | translate)">
+            <!-- Maximize -->
+            <svg *ngIf="!isFullscreen" viewBox="0 0 10 10" fill="none"
+                 stroke="currentColor" stroke-width="1" aria-hidden="true">
+              <rect x="0.75" y="0.75" width="8.5" height="8.5"/>
+            </svg>
+            <!-- Restore -->
+            <svg *ngIf="isFullscreen" viewBox="0 0 10 10" fill="none"
+                 stroke="currentColor" stroke-width="1" aria-hidden="true">
+              <rect x="2.5" y="0.75" width="6.75" height="6.75"/>
+              <polyline points="0.75,2.5 0.75,9.25 7.5,9.25"/>
+            </svg>
+          </button>
+
+          <button class="winbtn winbtn-min" (click)="minimizeChat()" [title]="'CHATBOT.MINIMIZE' | translate" [attr.aria-label]="'CHATBOT.MINIMIZE_ARIA' | translate">
+            <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
+              <line x1="1" y1="5" x2="9" y2="5" stroke-linecap="round"/>
+            </svg>
+          </button>
+
+          <button class="winbtn winbtn-close" (click)="toggleChat()"
+                  [title]="'CHATBOT.CLOSE_BTN' | translate" [attr.aria-label]="'CHATBOT.CLOSE_BTN_ARIA' | translate">
+            <svg viewBox="0 0 10 10" fill="none" stroke="currentColor"
+                 stroke-width="1" aria-hidden="true">
+              <line x1="1" y1="1" x2="9" y2="9"/>
+              <line x1="9" y1="1" x2="1" y2="9"/>
+            </svg>
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Zone messages -->
+    <div
+      class="chat-messages"
+      #scrollContainer
+      role="log"
+      aria-live="polite"
+      aria-atomic="false"
+      [attr.aria-label]="'CHATBOT.MESSAGES_ARIA' | translate"
+    >
+
+      <!-- Bannière session chargée -->
+      <div class="session-banner" *ngIf="loadedSessionBanner" role="status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v4l3 3" stroke-linecap="round"/>
+        </svg>
+        <span>{{ 'CHATBOT.SESSION_LOADED' | translate }} <strong>{{ loadedSessionBanner }}</strong></span>
+        <button (click)="loadedSessionBanner = ''" [attr.aria-label]="'CHATBOT.CLOSE_BANNER_ARIA' | translate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Écran d'accueil (quand aucun message) -->
+      <div class="welcome-screen" *ngIf="messages.length === 0 && !isTyping">
+        <div class="welcome-logo" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="2" opacity="0.2"/>
+            <path d="M14 34L24 14L34 34" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17 28h14" stroke="currentColor" stroke-width="2.5"
+                  stroke-linecap="round"/>
+          </svg>
+        </div>
+        <h2 class="welcome-title">{{ 'CHATBOT.WELCOME_TITLE' | translate }}</h2>
+        <p class="welcome-subtitle">{{ 'CHATBOT.WELCOME_SUBTITLE' | translate }}</p>
+      </div>
+
+      <!-- Messages -->
+      <div
+        *ngFor="let msg of messages; trackBy: trackByMessage"
+        class="message"
+        [class.msg-user]="msg.sender === 'user'"
+        [class.msg-bot]="msg.sender === 'bot'"
+        [class.msg-proactive]="msg.isProactive"
+      >
+        <div class="msg-avatar" *ngIf="msg.sender === 'bot'" aria-hidden="true">
+          <span *ngIf="!msg.isProactive">AI</span>
+          <span *ngIf="msg.isProactive" class="avatar-proactive" title="ARIA — message automatique">⚡</span>
+        </div>
+
+        <div class="msg-content">
+          <div class="msg-bubble" [class.msg-bubble--form]="msg.formConfig">
+            <!-- Image collée / jointe -->
+            <img *ngIf="msg.imageUrl" [src]="msg.imageUrl" class="msg-image" alt="Image" />
+
+            <!-- Contenu texte normal -->
+            <ng-container *ngIf="!msg.formConfig">
+              <markdown *ngIf="!msg.streaming && msg.content" [data]="msg.content" class="msg-markdown"></markdown>
+              <ng-container *ngIf="msg.streaming">
+                <span class="streaming-text">{{ msg.content }}</span><span class="stream-cursor" aria-hidden="true"></span>
+              </ng-container>
+
+              <!-- Graphiques Chart.js -->
+              <ng-container *ngIf="!msg.streaming && msg.chartConfigs?.length">
+                <app-chat-chart
+                  *ngFor="let chart of msg.chartConfigs"
+                  [config]="chart">
+                </app-chat-chart>
+              </ng-container>
+            </ng-container>
+
+            <!-- Formulaire intégré dans la bulle -->
+            <ng-container *ngIf="msg.formConfig">
+              <p class="form-intro-text" *ngIf="msg.content">{{ msg.content }}</p>
+              <app-dynamic-form
+                [fields]="msg.formConfig.fields"
+                [submitLabel]="msg.formConfig.submitLabel"
+                [submitFn]="msg.formConfig.submitFn"
+                [successMessage]="msg.formConfig.successMessage"
+                [showCancel]="true"
+                (formSubmit)="onFormInChatSubmit(msg)"
+                (formCancel)="onFormInChatCancel(msg)">
+              </app-dynamic-form>
+            </ng-container>
+
+            <!-- Carte de navigation -->
+            <div
+              class="nav-card"
+              *ngIf="msg.navCard && !msg.navCard.dismissed"
+              role="complementary"
+            >
+              <div class="nav-card-icon" aria-hidden="true">
+                <ng-container [ngSwitch]="msg.navCard.key">
+                  <svg *ngSwitchCase="'electricity'" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg *ngSwitchCase="'water'"       viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 9 5 14a7 7 0 0 0 14 0c0-5-3.13-12-7-12z" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                  <svg *ngSwitchCase="'gaz'"         viewBox="0 0 24 24"><path d="M12 2c-4 4-6 8-2 12 1 1 2 2 2 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M14 22c0-2 2-4 2-6 2-3 0-7-4-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  <svg *ngSwitchCase="'fuel'"        viewBox="0 0 24 24"><path d="M3 22V8l6-6h8v20M3 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M19 8h2a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1h-2" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                  <svg *ngSwitchCase="'alerts'"      viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  <svg *ngSwitchCase="'devices'"     viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="12" y1="18" x2="12" y2="18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+                  <svg *ngSwitchCase="'dashboard'"   viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                  <svg *ngSwitchCase="'users'"       viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                  <svg *ngSwitchDefault             viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 8v4l3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                </ng-container>
+              </div>
+
+              <div class="nav-card-info">
+                <span class="nav-card-label">Accéder à <strong>{{ msg.navCard.label }}</strong></span>
+              </div>
+
+              <button
+                class="nav-card-btn"
+                (click)="navigateFromCard(msg)"
+                [attr.aria-label]="'Ouvrir ' + msg.navCard.label"
+              >
+                Ouvrir
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+
+              <button
+                class="nav-card-dismiss"
+                (click)="msg.navCard.dismissed = true"
+                aria-label="Ignorer la suggestion"
+              >✕</button>
+            </div>
+
+          <!-- Badge ARIA Proactive + bouton dismiss -->
+          <div class="proactive-badge" *ngIf="msg.isProactive">
+            <span class="proactive-badge__label">
+              <span class="proactive-badge__dot" aria-hidden="true"></span>
+              ARIA a détecté une anomalie
+            </span>
+            <button
+              class="proactive-badge__dismiss"
+              (click)="dismissProactive(msg)"
+              title="Ignorer ce message"
+              aria-label="Ignorer ce message proactif"
+            >✕</button>
+          </div>
+
+          </div>
+
+          <!-- Quick Replies -->
+          <div class="quick-replies" *ngIf="msg.quickReplies?.length && !msg.streaming">
+            <button
+              *ngFor="let qr of msg.quickReplies"
+              class="qr-btn"
+              (click)="onQuickReply(msg, qr.value)"
+            >{{ qr.label }}</button>
+          </div>
+
+          <!-- Téléchargement CSV -->
+          <div class="csv-download" *ngIf="msg.csvDownload && !msg.streaming">
+            <a
+              [href]="msg.csvDownload.url"
+              [download]="msg.csvDownload.filename"
+              class="csv-download-btn"
+              target="_blank"
+              rel="noopener"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              {{ msg.csvDownload.filename }}
+            </a>
+          </div>
+
+          <!-- PDF Analyse ARIA (généré côté backend avec graphiques) -->
+          <div class="pdf-analysis-card" *ngIf="msg.pdfAnalysis && !msg.streaming">
+            <div class="pdf-analysis-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="13" x2="15" y2="13"/>
+                <line x1="9" y1="17" x2="12" y2="17"/>
+                <polyline points="7 10 9 12 13 8"/>
+              </svg>
+            </div>
+            <div class="pdf-analysis-card__info">
+              <span class="pdf-analysis-card__name">Rapport d'analyse PDF</span>
+              <span class="pdf-analysis-card__meta">{{ msg.pdfAnalysis.filename }}</span>
+            </div>
+            <a
+              [href]="msg.pdfAnalysis.url"
+              [download]="msg.pdfAnalysis.filename"
+              class="pdf-analysis-card__btn"
+              target="_blank"
+              rel="noopener"
+              title="Télécharger le rapport PDF"
+              aria-label="Télécharger le rapport PDF"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                   aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </a>
+          </div>
+
+          <!-- Rapport PDF généré -->
+          <div class="pdf-report-card" *ngIf="msg.pdfDownload && !msg.streaming">
+            <div class="pdf-report-card__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.6" stroke-linecap="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="9" y1="13" x2="15" y2="13"/>
+                <line x1="9" y1="17" x2="12" y2="17"/>
+              </svg>
+            </div>
+            <div class="pdf-report-card__info">
+              <span class="pdf-report-card__name">{{ msg.pdfDownload.request.label }}</span>
+              <span class="pdf-report-card__meta">
+                {{ msg.pdfDownload.filename }} · {{ msg.pdfDownload.generatedAt | date: 'HH:mm' }}
+              </span>
+            </div>
+            <button
+              class="pdf-report-card__btn"
+              (click)="triggerPdf(msg.pdfDownload.request)"
+              title="Re-télécharger le rapport"
+              aria-label="Re-télécharger le rapport PDF"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="msg-footer">
+            <span class="msg-time">{{ msg.timestamp | date: 'HH:mm' }}</span>
+            <div class="msg-actions">
+              <ng-container *ngIf="msg.sender === 'bot'">
+                <!-- TTS : écouter la réponse -->
+                <button class="msg-action-btn" [class.tts-active]="speakingMsgId === msg.id"
+                        (click)="speak(msg)"
+                        [title]="speakingMsgId === msg.id ? ('CHATBOT.STOP_PLAYBACK' | translate) : ('CHATBOT.LISTEN' | translate)"
+                        [attr.aria-label]="speakingMsgId === msg.id ? ('CHATBOT.STOP_ARIA' | translate) : ('CHATBOT.LISTEN_ARIA' | translate)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                    <ng-container *ngIf="speakingMsgId !== msg.id">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    </ng-container>
+                    <ng-container *ngIf="speakingMsgId === msg.id">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                      <line x1="23" y1="9" x2="17" y2="15"/>
+                      <line x1="17" y1="9" x2="23" y2="15"/>
+                    </ng-container>
+                  </svg>
+                </button>
+                <button class="msg-action-btn" [class.active-up]="msg.feedback === 'up'"
+                        (click)="giveFeedback(msg, 'up')" [title]="'CHATBOT.GOOD_ANSWER' | translate"
+                        [attr.aria-label]="'CHATBOT.GOOD_ANSWER' | translate">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="1.8" stroke-linecap="round">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/>
+                    <path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                  </svg>
+                </button>
+                <button class="msg-action-btn" [class.active-down]="msg.feedback === 'down'"
+                        (click)="giveFeedback(msg, 'down')" [title]="'CHATBOT.BAD_ANSWER' | translate"
+                        [attr.aria-label]="'CHATBOT.BAD_ANSWER' | translate">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="1.8" stroke-linecap="round">
+                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3H10z"/>
+                    <path d="M17 2h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/>
+                  </svg>
+                </button>
+              </ng-container>
+              <button class="msg-action-btn" (click)="copyMessage(msg)"
+                      [title]="copiedId === msg.id ? ('CHATBOT.COPIED' | translate) : ('CHATBOT.COPY' | translate)"
+                      [attr.aria-label]="'CHATBOT.COPY_ARIA' | translate">
+                <svg *ngIf="copiedId !== msg.id" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <svg *ngIf="copiedId === msg.id" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                     class="copied-check">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </button>
+              <button class="msg-action-btn" *ngIf="msg.sender === 'user'"
+                      (click)="retryMessage(msg)"
+                      [title]="'CHATBOT.RETRY' | translate" [attr.aria-label]="'CHATBOT.RETRY_ARIA' | translate">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round">
+                  <polyline points="1 4 1 10 7 10"/>
+                  <path d="M3.51 15a9 9 0 1 0 .49-4.95"/>
+                </svg>
+              </button>
+              <button class="msg-action-btn" *ngIf="msg.sender === 'user'"
+                      (click)="editMessage(msg)"
+                      [title]="'CHATBOT.EDIT' | translate" [attr.aria-label]="'CHATBOT.EDIT_ARIA' | translate">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1.8" stroke-linecap="round">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Phase thinking / tool (avant le premier token) ── -->
+      <div class="aria-status"
+           *ngIf="isTyping && thinkingPhase !== 'off' && thinkingPhase !== 'writing'"
+           role="status"
+           [attr.aria-label]="thinkingPhase === 'tool' ? toolLabel : thinkingLabel">
+        <div class="msg-avatar" aria-hidden="true"><span>AI</span></div>
+        <div class="status-bubble" [class.tool-active]="thinkingPhase === 'tool'">
+          <span class="status-label">
+            {{ thinkingPhase === 'tool' ? toolLabel : thinkingLabel }}
+          </span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Suggestions -->
+    <div class="suggestions-row"
+         *ngIf="suggestions.length && messages.length === 0 && !isTyping"
+         role="group" [attr.aria-label]="'CHATBOT.SUGGESTIONS_ARIA' | translate">
+      <button
+        class="suggestion"
+        *ngFor="let s of suggestions; trackBy: trackBySuggestion"
+        (click)="sendMessage(s)"
+        [attr.aria-label]="('CHATBOT.SEND_SUGGESTION_ARIA' | translate) + ' ' + s"
+      >{{ s }}</button>
+    </div>
+
+    <!-- Barre d'actions rapides — formulaires -->
+    <div class="chat-form-actions" *ngIf="!isTyping">
+      <button *ngIf="canAddUser" class="chat-form-btn" (click)="openUserForm()" [title]="'CHATBOT.FORMS.ADD_USER_TITLE' | translate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+          <line x1="19" y1="8" x2="19" y2="14"/><line x1="16" y1="11" x2="22" y2="11"/>
+        </svg>
+        {{ 'CHATBOT.FORMS.ADD_USER' | translate }}
+      </button>
+      <button *ngIf="canAddDevice" class="chat-form-btn" (click)="openDeviceForm()" [title]="'CHATBOT.FORMS.ADD_DEVICE_TITLE' | translate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <rect x="5" y="2" width="14" height="20" rx="2"/>
+          <line x1="12" y1="18" x2="12" y2="18" stroke-width="2.5"/>
+          <line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="13" y2="11"/>
+        </svg>
+        {{ 'CHATBOT.FORMS.ADD_DEVICE' | translate }}
+      </button>
+      <button *ngIf="canAddAlert" class="chat-form-btn" (click)="openAlertForm()" [title]="'CHATBOT.FORMS.ADD_ALERT_TITLE' | translate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        {{ 'CHATBOT.FORMS.ADD_ALERT' | translate }}
+      </button>
+    </div>
+
+    <!-- Zone de saisie -->
+    <div class="input-area">
+
+      <!-- Preview fichier attaché -->
+      <div class="file-preview" *ngIf="attachedFile">
+        <div class="file-preview-inner">
+          <!-- Image -->
+          <img *ngIf="attachedFileType === 'image' && attachedFilePreview"
+               [src]="attachedFilePreview" class="file-thumb" alt="Aperçu" />
+          <!-- PDF icon -->
+          <div *ngIf="attachedFileType === 'pdf'" class="file-icon pdf">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            <span>PDF</span>
+          </div>
+          <!-- Text icon -->
+          <div *ngIf="attachedFileType === 'text'" class="file-icon text">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            <span>TXT</span>
+          </div>
+          <!-- Other icon -->
+          <div *ngIf="attachedFileType === 'other'" class="file-icon other">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+              <polyline points="13 2 13 9 20 9"/>
+            </svg>
+          </div>
+          <div class="file-info">
+            <span class="file-name">{{ attachedFile.name }}</span>
+            <span class="file-size">{{ (attachedFile.size / 1024).toFixed(1) }} KB</span>
+          </div>
+        </div>
+        <button class="file-remove" (click)="removeAttachment()" [title]="'CHATBOT.REMOVE_FILE' | translate" [attr.aria-label]="'CHATBOT.REMOVE_FILE' | translate">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <form class="input-form" (ngSubmit)="sendMessage()" #chatForm="ngForm" novalidate>
+
+        <textarea
+          class="input-field"
+          [(ngModel)]="userInput"
+          name="userInput"
+          [placeholder]="'CHATBOT.INPUT_PLACEHOLDER' | translate"
+          (keydown)="onKeyDown($event)"
+          (paste)="onPaste($event)"
+          rows="1"
+          [disabled]="isTyping"
+          [attr.aria-label]="'CHATBOT.INPUT_ARIA' | translate"
+          maxlength="4000"
+          #messageInput
+        ></textarea>
+
+        <div class="input-actions">
+
+          <!-- Bouton import fichier -->
+          <label class="action-btn attach-btn"
+                 [class.has-file]="!!attachedFile"
+                 [title]="'CHATBOT.ATTACH_FILE' | translate"
+                 [attr.aria-label]="'CHATBOT.ATTACH_FILE' | translate">
+            <input type="file"
+                   [accept]="ACCEPTED_TYPES"
+                   (change)="onFileSelected($event)"
+                   style="display:none"
+                   [disabled]="isTyping" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </label>
+
+          <button
+            type="button"
+            class="action-btn voice-btn"
+            [class.listening]="isListening"
+            (click)="startVoiceInput()"
+            [disabled]="isVoiceSupported === false || isTyping"
+            [title]="isListening ? ('CHATBOT.STOP_DICTATION' | translate) : ('CHATBOT.START_DICTATION' | translate)"
+            [attr.aria-label]="isListening ? ('CHATBOT.STOP_DICTATION_ARIA' | translate) : ('CHATBOT.START_DICTATION_ARIA' | translate)"
+            [attr.aria-pressed]="isListening"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <path d="M12 2a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>
+            </svg>
+          </button>
+
+          <button
+            *ngIf="isTyping"
+            type="button"
+            class="action-btn send-btn"
+            (click)="stopMessage()"
+            [title]="'CHATBOT.STOP_GENERATION' | translate"
+            [attr.aria-label]="'CHATBOT.STOP_GENERATION' | translate"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </button>
+
+          <button
+            *ngIf="!isTyping"
+            type="submit"
+            class="action-btn send-btn"
+            [disabled]="!userInput.trim()"
+            [title]="'CHATBOT.SEND' | translate"
+            [attr.aria-label]="'CHATBOT.SEND' | translate"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/>
+            </svg>
+          </button>
+
+        </div>
+      </form>
+
+      <div class="input-meta">
+        <small class="input-hint">{{ 'CHATBOT.INPUT_HINT' | translate }}</small>
+        <small class="char-count"
+               [class.near-limit]="userInput.length > 3500"
+               *ngIf="userInput.length > 0">
+          {{ userInput.length }}/4000
+        </small>
+      </div>
+    </div>
+
+  </div><!-- /chat-panel -->
+
+</div><!-- /chatbot-shell -->

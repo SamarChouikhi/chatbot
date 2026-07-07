@@ -1,0 +1,969 @@
+<div class="crud-page">
+
+  <!-- ── Header ───────────────────────────────────────────────── -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1 class="page-title">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;fill:#4da3ff;vertical-align:middle;margin-right:6px;">
+          <path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
+        </svg>
+        {{ 'ALERTS_PAGE.TITLE' | translate }}
+      </h1>
+      <span class="page-sub">{{ total }} {{ total !== 1 ? ('COMMON.ALERTS' | translate) : ('COMMON.ALERT' | translate) }}</span>
+    </div>
+    <button class="btn btn-primary" (click)="openCreate()">
+      <svg viewBox="0 0 24 24"><path d="M19 11h-6V5h-2v6H5v2h6v6h2v-6h6z"/></svg>
+      {{ 'ALERTS_PAGE.NEW_ALERT' | translate }}
+    </button>
+  </div>
+
+  <!-- ── Tab switcher ─────────────────────────────────────────── -->
+  <div class="alert-tabs">
+    <button class="alert-tab" [class.active]="activeTab === 'rules'" (click)="switchTab('rules')">
+      <svg viewBox="0 0 24 24"><path d="M12 2L1 21h22L12 2zm0 3.5L20.5 19h-17L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>
+      {{ 'ALERTS_PAGE.TAB_MANUAL' | translate }}
+      <span class="alert-tab-count">{{ total }}</span>
+    </button>
+    <button class="alert-tab" [class.active]="activeTab === 'ad'" (click)="switchTab('ad')">
+      <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg>
+      {{ 'ALERTS_PAGE.TAB_AI_ANOMALIES' | translate }}
+      <span class="alert-tab-count ad-count" *ngIf="adAnomalies.length > 0">{{ adAnomalies.length }}</span>
+    </button>
+    <button class="alert-tab" [class.active]="activeTab === 'predictions'" (click)="switchTab('predictions')">
+      <svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L12 15.45 7.77 18l1.12-4.81-3.73-3.23 4.92-.42L12 5l1.92 4.53 4.92.42-3.73 3.23L16.23 18z"/></svg>
+      {{ 'ALERTS_PAGE.TAB_PREDICTIONS' | translate }}
+      <span class="alert-tab-count pred-count" *ngIf="predictions.length > 0">{{ predictions.length }}</span>
+    </button>
+  </div>
+
+  <!-- ── Success banner ────────────────────────────────────────── -->
+  <div class="success-banner" *ngIf="successMsg && activeTab === 'rules'">
+    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    {{ successMsg }}
+    <button (click)="successMsg=''">✕</button>
+  </div>
+
+  <!-- ── Error banner ──────────────────────────────────────────── -->
+  <div class="error-banner" *ngIf="errorMsg && activeTab === 'rules'">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    {{ errorMsg }}
+    <button (click)="errorMsg = ''">✕</button>
+  </div>
+
+  <!-- ══ RULES TAB ════════════════════════════════════════════ -->
+  <ng-container *ngIf="activeTab === 'rules'">
+
+  <!-- ── Filtres ───────────────────────────────────────────────── -->
+  <div class="filters-container">
+    <div class="filters-bar">
+      <!-- Type d'alerte -->
+      <div class="filter-group">
+        <label class="filter-label">{{ 'ALERTS_PAGE.FILTER_TYPE' | translate }}</label>
+        <select class="filter-select" [value]="searchType" (change)="onSearchType($any($event.target).value)">
+          <option value="">{{ 'ALERTS_PAGE.ALL_TYPES' | translate }}</option>
+          <optgroup [label]="'ALERTS_PAGE.TYPE_CRITICAL' | translate">
+            <option *ngFor="let t of alertTypes" [value]="t.value" [hidden]="t.level !== 'critical'">
+              {{ t.label }}
+            </option>
+          </optgroup>
+          <optgroup [label]="'ALERTS_PAGE.TYPE_WARNING' | translate">
+            <option *ngFor="let t of alertTypes" [value]="t.value" [hidden]="t.level !== 'warning'">
+              {{ t.label }}
+            </option>
+          </optgroup>
+          <optgroup [label]="'ALERTS_PAGE.TYPE_INFO' | translate">
+            <option *ngFor="let t of alertTypes" [value]="t.value" [hidden]="t.level !== 'info'">
+              {{ t.label }}
+            </option>
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- Device -->
+      <div class="filter-group">
+        <label class="filter-label">{{ 'ALERTS_PAGE.FILTER_DEVICE' | translate }}</label>
+        <select class="filter-select" [value]="filterIdDevice || ''" (change)="onFilterDevice($any($event.target).value)">
+          <option value="">{{ 'ALERTS_PAGE.ALL_DEVICES' | translate }}</option>
+          <option *ngFor="let d of devices; trackBy: trackByDevice" [value]="d.id">
+            {{ deviceLabel(d) }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Message -->
+      <div class="filter-group filter-group-wide">
+        <label class="filter-label">{{ 'COMMON.SEARCH' | translate }}</label>
+        <div class="search-box">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input
+            type="text"
+            [placeholder]="'ALERTS_PAGE.SEARCH_PLACEHOLDER' | translate"
+            [(ngModel)]="filterMessage"
+            (input)="applyFilters()" />
+          <button class="clear-btn" *ngIf="filterMessage" (click)="filterMessage=''; applyFilters()">
+            <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bouton reset -->
+      <button class="btn-reset-filters" *ngIf="hasActiveFilters" (click)="resetAllFilters()" [title]="'COMMON.RESET' | translate">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+        {{ 'COMMON.RESET' | translate }}
+      </button>
+    </div>
+
+    <!-- Badge de filtres actifs -->
+    <div class="filters-summary" *ngIf="hasActiveFilters">
+      <span class="filters-count">{{ activeFiltersCount }} {{ 'ALERTS_PAGE.ACTIVE_FILTERS' | translate }}</span>
+      <div class="active-filters-tags">
+        <span class="filter-tag" *ngIf="searchType">
+          Type: {{ getAlertTypeLabel(searchType) }}
+          <button (click)="searchType=''; applyFilters()">×</button>
+        </span>
+        <span class="filter-tag" *ngIf="filterIdDevice">
+          Device: {{ getDeviceName(filterIdDevice) }}
+          <button (click)="filterIdDevice=undefined; applyFilters()">×</button>
+        </span>
+        <span class="filter-tag" *ngIf="filterMessage">
+          Message: "{{ filterMessage }}"
+          <button (click)="filterMessage=''; applyFilters()">×</button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Table ─────────────────────────────────────────────────── -->
+  <div class="table-card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="sortable" (click)="sort('date')">
+              {{ 'ALERTS_PAGE.COL_DATE' | translate }} <span class="sort-icon" [class.active]="sortCol==='date'">{{ sortIcon('date') }}</span>
+            </th>
+            <th class="sortable" (click)="sort('idDevice')">
+              {{ 'ALERTS_PAGE.COL_DEVICE' | translate }} <span class="sort-icon" [class.active]="sortCol==='idDevice'">{{ sortIcon('idDevice') }}</span>
+            </th>
+            <th class="sortable" (click)="sort('type')">
+              {{ 'ALERTS_PAGE.COL_TYPE' | translate }} <span class="sort-icon" [class.active]="sortCol==='type'">{{ sortIcon('type') }}</span>
+            </th>
+            <th class="sortable" (click)="sort('valeur')">
+              {{ 'ALERTS_PAGE.COL_VALUE' | translate }} <span class="sort-icon" [class.active]="sortCol==='valeur'">{{ sortIcon('valeur') }}</span>
+            </th>
+            <th>{{ 'ALERTS_PAGE.COL_DIFF' | translate }}</th>
+            <th>{{ 'ALERTS_PAGE.COL_MINMAX' | translate }}</th>
+            <th>{{ 'ALERTS_PAGE.COL_DURATION' | translate }}</th>
+            <th>{{ 'ALERTS_PAGE.COL_MSG' | translate }}</th>
+            <th>{{ 'ALERTS_PAGE.COL_FROM' | translate }}</th>
+            <th class="col-actions">{{ 'ALERTS_PAGE.COL_ACTIONS' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- Loading -->
+          <tr *ngIf="loading">
+            <td class="loading-cell" colspan="10">
+              <div class="loader-dots"><span></span><span></span><span></span></div>
+            </td>
+          </tr>
+
+          <!-- Empty -->
+          <tr *ngIf="!loading && alerts.length === 0">
+            <td class="empty-cell" colspan="10">{{ 'ALERTS_PAGE.NO_ALERTS' | translate }}</td>
+          </tr>
+
+          <!-- Rows -->
+          <tr *ngFor="let a of alerts; trackBy: trackByAlert" [class]="rowClass(a)">
+
+            <td class="mono">{{ formatDate(a.date) }}</td>
+
+            <td>
+              <div class="device-cell">
+                <div class="device-icon-sm type-1">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="rgba(77,163,255,0.8)">
+                    <path d="M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-5 18a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+                  </svg>
+                </div>
+                <span class="device-name-hint">{{ getDeviceName(a.idDevice) }}</span>
+              </div>
+            </td>
+
+            <td>
+              <span class="alert-type-badge" [ngClass]="levelClass(a)">
+                <span class="level-dot" [ngClass]="levelDot(a)"></span>
+                {{ getAlertTypeLabel(a.type) }}
+              </span>
+            </td>
+
+            <td>{{ a.valeur != null ? (a.valeur | number:'1.2-2') : '—' }}</td>
+
+            <td [class.text-red]="(a.diff ?? 0) > 0">
+              {{ a.diff != null ? (a.diff | number:'1.2-2') : '—' }}
+            </td>
+
+            <td class="text-muted">
+              {{ (a.valMin != null || a.valMax != null) ? ((a.valMin ?? '?') + ' / ' + (a.valMax ?? '?')) : '—' }}
+            </td>
+
+            <td>
+              <span [class.attempts-warn]="(a.tempsInfraction ?? 0) > 60">
+                {{ a.tempsInfraction != null ? a.tempsInfraction + ' s' : '—' }}
+              </span>
+            </td>
+
+            <td class="text-ellipsis" [title]="a.message || ''">{{ a.message || '—' }}</td>
+
+            <td><span class="type-chip" *ngIf="a.from">{{ a.from }}</span><span *ngIf="!a.from">—</span></td>
+
+            <td>
+              <div class="actions-group">
+                <button class="action-btn view-btn"   (click)="openView(a)"   [title]="'COMMON.VIEW' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+                </button>
+                <button class="action-btn edit-btn"   (click)="openEdit(a)"   [title]="'COMMON.EDIT' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </button>
+                <button class="action-btn delete-btn" (click)="openDelete(a)" [title]="'COMMON.DELETE' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ── Pagination ─────────────────────────────────────────── -->
+    <div class="pagination" *ngIf="totalPages > 1">
+      <button class="page-btn" (click)="goPage(page - 1)" [disabled]="page === 0">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <ng-container *ngFor="let p of pageNumbers">
+        <button class="page-btn" [class.active]="p === page" (click)="goPage(p)"
+                *ngIf="p === 0 || p === totalPages - 1 || (p >= page - 2 && p <= page + 2)">
+          {{ p + 1 }}
+        </button>
+        <span class="page-btn" style="pointer-events:none;cursor:default"
+              *ngIf="(p === page - 3 || p === page + 3) && p !== 0 && p !== totalPages - 1">…</span>
+      </ng-container>
+      <button class="page-btn" (click)="goPage(page + 1)" [disabled]="page >= totalPages - 1">
+        <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+      <span class="page-info">{{ 'COMMON.PAGE' | translate }} {{ page + 1 }} / {{ totalPages }}</span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  MODAL VIEW                                                 -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="modalMode === 'view' && selectedAlert" (click)="closeModal()">
+    <div class="modal modal-wide" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title">{{ 'ALERTS_PAGE.DETAIL_TITLE' | translate }}</h2>
+        <button class="modal-close" (click)="closeModal()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+
+        <p class="section-title-divider">{{ 'ALERTS_PAGE.SECTION_IDENTITY' | translate }}</p>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.COL_DATE' | translate }}</span>
+            <span class="info-value mono">{{ formatDate(selectedAlert.date) }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.COL_DEVICE' | translate }}</span>
+            <span class="info-value">
+              <span class="id-badge">#{{ selectedAlert.idDevice }}</span>
+              <span class="device-name-hint" style="margin-left:6px">{{ getDeviceName(selectedAlert.idDevice) }}</span>
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.COL_TYPE' | translate }}</span>
+            <span class="info-value">
+              <span class="alert-type-badge" [ngClass]="levelClass(selectedAlert)">
+                <span class="level-dot" [ngClass]="levelDot(selectedAlert)"></span>
+                {{ getAlertTypeLabel(selectedAlert.type) }}
+              </span>
+            </span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.COL_FROM' | translate }}</span>
+            <span class="info-value">{{ selectedAlert.from || '—' }}</span>
+          </div>
+        </div>
+
+        <p class="section-title-divider">{{ 'ALERTS_PAGE.SECTION_VALUES' | translate }}</p>
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.COL_VALUE' | translate }}</span>
+            <span class="info-value">{{ selectedAlert.valeur ?? '—' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.COL_DIFF' | translate }}</span>
+            <span class="info-value" [class.text-red]="(selectedAlert.diff ?? 0) > 0">{{ selectedAlert.diff ?? '—' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.VAL_MIN' | translate }}</span>
+            <span class="info-value">{{ selectedAlert.valMin ?? '—' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.VAL_MAX' | translate }}</span>
+            <span class="info-value">{{ selectedAlert.valMax ?? '—' }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">{{ 'ALERTS_PAGE.COL_DURATION' | translate }}</span>
+            <span class="info-value" [class.text-red]="(selectedAlert.tempsInfraction ?? 0) > 60">
+              {{ selectedAlert.tempsInfraction != null ? selectedAlert.tempsInfraction + ' s' : '—' }}
+            </span>
+          </div>
+        </div>
+
+        <p class="section-title-divider">{{ 'ALERTS_PAGE.SECTION_MESSAGES' | translate }}</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>{{ 'ALERTS_PAGE.MSG_FR' | translate }}</label>
+            <textarea rows="2" disabled>{{ selectedAlert.message || '—' }}</textarea>
+          </div>
+          <div class="form-group">
+            <label>{{ 'ALERTS_PAGE.MSG_EN' | translate }}</label>
+            <textarea rows="2" disabled>{{ selectedAlert.messageEn || '—' }}</textarea>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>{{ 'ALERTS_PAGE.REC_FR' | translate }}</label>
+            <textarea rows="2" disabled>{{ selectedAlert.recommendationFr || '—' }}</textarea>
+          </div>
+          <div class="form-group">
+            <label>{{ 'ALERTS_PAGE.REC_EN' | translate }}</label>
+            <textarea rows="2" disabled>{{ selectedAlert.recommendationEn || '—' }}</textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-ghost" (click)="closeModal()">{{ 'COMMON.CLOSE' | translate }}</button>
+          <button class="btn btn-primary" (click)="openEdit(selectedAlert)">
+            <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            {{ 'COMMON.EDIT' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  MODAL CREATE / EDIT                                        -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="modalMode === 'create' || modalMode === 'edit'" (click)="closeModal()">
+    <div class="modal modal-wide" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title">{{ (modalMode === 'create' ? 'ALERTS_PAGE.CREATE_TITLE' : 'ALERTS_PAGE.EDIT_TITLE') | translate }}</h2>
+        <button class="modal-close" (click)="closeModal()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="error-banner" *ngIf="errorMsg">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+          {{ errorMsg }}
+        </div>
+
+        <form [formGroup]="form" (ngSubmit)="save()">
+
+          <p class="section-title-divider">{{ 'ALERTS_PAGE.SECTION_IDENTITY' | translate }}</p>
+          <div class="form-row">
+
+            <!-- Date -->
+            <div class="form-group" [class.has-error]="isInvalid('date')">
+              <label>
+                {{ 'ALERTS_PAGE.DATE_LABEL' | translate }} <span class="required">*</span>
+              </label>
+              <input
+                type="datetime-local"
+                formControlName="date"
+                [min]="modalMode === 'create' ? todayIso : null" />
+              <span class="error-msg" *ngIf="hasError('date', 'required')">
+                {{ 'ALERTS_PAGE.DATE_REQUIRED' | translate }}
+              </span>
+            </div>
+
+            <!-- Device -->
+            <div class="form-group" [class.has-error]="isInvalid('idDevice')">
+              <label>
+                {{ 'ALERTS_PAGE.FILTER_DEVICE' | translate }} <span class="required">*</span>
+                <span class="field-hint" *ngIf="devicesLoading">{{ 'COMMON.LOADING' | translate }}</span>
+              </label>
+              <div class="select-wrapper">
+                <select
+                  formControlName="idDevice"
+                  [class.placeholder-option]="!form.get('idDevice')?.value">
+                  <option [ngValue]="null" disabled hidden>{{ 'ALERTS_PAGE.SELECT_DEVICE' | translate }}</option>
+                  <option
+                    *ngFor="let d of devices; trackBy: trackByDevice"
+                    [ngValue]="d.id">
+                    #{{ d.id }} — {{ d.nom || 'Sans nom' }}
+                    <ng-container *ngIf="d.description"> ({{ d.description }})</ng-container>
+                  </option>
+                </select>
+                <svg class="select-arrow" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+              </div>
+              <span class="error-msg" *ngIf="hasError('idDevice', 'required')">
+                {{ 'ALERTS_PAGE.DEVICE_REQUIRED' | translate }}
+              </span>
+            </div>
+
+            <!-- Type -->
+            <div class="form-group" [class.has-error]="isInvalid('type')">
+              <label>{{ 'ALERTS_PAGE.FILTER_TYPE' | translate }} <span class="required">*</span></label>
+              <div class="select-wrapper">
+                <select
+                  formControlName="type"
+                  [class.placeholder-option]="!form.get('type')?.value">
+                  <option value="" disabled hidden>{{ 'ALERTS_PAGE.SELECT_TYPE' | translate }}</option>
+                  <optgroup [label]="'ALERTS_PAGE.TYPE_CRITICAL' | translate">
+                    <option *ngFor="let t of alertTypes" [value]="t.value" [hidden]="t.level !== 'critical'">{{ t.label }}</option>
+                  </optgroup>
+                  <optgroup [label]="'ALERTS_PAGE.TYPE_WARNING' | translate">
+                    <option *ngFor="let t of alertTypes" [value]="t.value" [hidden]="t.level !== 'warning'">{{ t.label }}</option>
+                  </optgroup>
+                  <optgroup [label]="'ALERTS_PAGE.TYPE_INFO' | translate">
+                    <option *ngFor="let t of alertTypes" [value]="t.value" [hidden]="t.level !== 'info'">{{ t.label }}</option>
+                  </optgroup>
+                </select>
+                <svg class="select-arrow" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+              </div>
+              <div class="type-preview" *ngIf="form.get('type')?.value">
+                <span class="alert-type-badge" [ngClass]="alertTypeLevelClass(form.get('type')?.value)">
+                  <span class="level-dot" [ngClass]="alertTypeLevelClass(form.get('type')?.value)"></span>
+                  {{ getAlertTypeLabel(form.get('type')?.value) }}
+                </span>
+              </div>
+              <span class="error-msg" *ngIf="hasError('type', 'required')">
+                {{ 'ALERTS_PAGE.TYPE_REQUIRED' | translate }}
+              </span>
+            </div>
+
+          </div>
+
+          <!-- ══ Valeurs mesurées ══ -->
+          <p class="section-title-divider">{{ 'ALERTS_PAGE.VALUES_SECTION' | translate }}</p>
+
+          <div class="field-warn-banner" *ngIf="hasMinGtMaxError">
+            ⚠ La valeur minimale ne peut pas être supérieure à la valeur maximale.
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" [class.has-error]="isInvalid('valeur')">
+              <label>{{ 'ALERTS_PAGE.COL_VALUE' | translate }}</label>
+              <input type="number" step="any" formControlName="valeur" placeholder="ex : 28.5" />
+              <span class="error-msg" *ngIf="hasError('valeur', 'min') || hasError('valeur', 'max')">Valeur hors limites.</span>
+            </div>
+            <div class="form-group" [class.has-error]="isInvalid('diff')">
+              <label>{{ 'ALERTS_PAGE.COL_DIFF' | translate }}</label>
+              <input type="number" step="any" formControlName="diff" placeholder="ex : 3.2" />
+              <span class="error-msg" *ngIf="hasError('diff', 'min') || hasError('diff', 'max')">Valeur hors limites.</span>
+            </div>
+            <div class="form-group" [class.has-error]="isInvalid('valMin') || hasMinGtMaxError">
+              <label>{{ 'ALERTS_PAGE.VAL_MIN' | translate }}</label>
+              <input type="number" step="any" formControlName="valMin" placeholder="ex : 0" />
+            </div>
+            <div class="form-group" [class.has-error]="isInvalid('valMax') || hasMinGtMaxError">
+              <label>{{ 'ALERTS_PAGE.VAL_MAX' | translate }}</label>
+              <input type="number" step="any" formControlName="valMax" placeholder="ex : 30" />
+            </div>
+            <div class="form-group" [class.has-error]="isInvalid('tempsInfraction')">
+              <label>{{ 'ALERTS_PAGE.COL_DURATION' | translate }} (s)</label>
+              <input type="number" formControlName="tempsInfraction" placeholder="ex : 60" min="0" max="86400" />
+            </div>
+          </div>
+
+          <!-- ══ Messages & Recommandations ═══ -->
+          <p class="section-title-divider">{{ 'ALERTS_PAGE.SECTION_MESSAGES' | translate }}</p>
+          <div class="form-row">
+            <div class="form-group" [class.has-error]="isInvalid('message')">
+              <label>{{ 'ALERTS_PAGE.MSG_FR' | translate }}</label>
+              <textarea formControlName="message" rows="2" maxlength="500"></textarea>
+              <span class="char-count">{{ (form.get('message')?.value || '').length }} / 500</span>
+            </div>
+            <div class="form-group" [class.has-error]="isInvalid('messageEn')">
+              <label>{{ 'ALERTS_PAGE.MSG_EN' | translate }}</label>
+              <textarea formControlName="messageEn" rows="2" maxlength="500"></textarea>
+              <span class="char-count">{{ (form.get('messageEn')?.value || '').length }} / 500</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" [class.has-error]="isInvalid('recommendationFr')">
+              <label>{{ 'ALERTS_PAGE.REC_FR' | translate }}</label>
+              <textarea formControlName="recommendationFr" rows="2" maxlength="500"></textarea>
+              <span class="char-count">{{ (form.get('recommendationFr')?.value || '').length }} / 500</span>
+            </div>
+            <div class="form-group" [class.has-error]="isInvalid('recommendationEn')">
+              <label>{{ 'ALERTS_PAGE.REC_EN' | translate }}</label>
+              <textarea formControlName="recommendationEn" rows="2" maxlength="500"></textarea>
+              <span class="char-count">{{ (form.get('recommendationEn')?.value || '').length }} / 500</span>
+            </div>
+          </div>
+
+          <!-- ══ From ═══ -->
+          <p class="section-title-divider">{{ 'ALERTS_PAGE.COL_FROM' | translate }}</p>
+          <div class="form-row" style="max-width:360px">
+            <div class="form-group" [class.has-error]="isInvalid('from')">
+              <label>{{ 'ALERTS_PAGE.COL_FROM' | translate }}</label>
+              <input type="text" formControlName="from" placeholder="ex : sensor_A" maxlength="45" />
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" (click)="closeModal()">{{ 'COMMON.CANCEL' | translate }}</button>
+            <button type="submit" class="btn btn-primary" [disabled]="saving || form.invalid">
+              <span class="btn-spinner" *ngIf="saving"></span>
+              {{ (modalMode === 'create' ? 'COMMON.CREATE' : 'COMMON.SAVE') | translate }}
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  MODAL DELETE                                               -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="modalMode === 'delete' && selectedAlert" (click)="closeModal()">
+    <div class="modal modal-sm" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title danger">{{ 'ALERTS_PAGE.DELETE_TITLE' | translate }}</h2>
+        <button class="modal-close" (click)="closeModal()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="confirm-msg">
+          {{ 'ALERTS_PAGE.DELETE_CONFIRM' | translate }}
+          <strong>{{ getAlertTypeLabel(selectedAlert.type) }}</strong>
+          — #{{ selectedAlert.idDevice }}
+          — {{ formatDate(selectedAlert.date) }}
+        </p>
+        <p class="confirm-msg" style="font-size:0.78rem;color:#e74c3c;margin-top:0.25rem">
+          {{ 'COMMON.IRREVERSIBLE' | translate }}
+        </p>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" (click)="closeModal()">{{ 'COMMON.CANCEL' | translate }}</button>
+          <button class="btn btn-danger" (click)="confirmDelete()" [disabled]="saving">
+            <span class="btn-spinner" *ngIf="saving"></span>
+            {{ 'COMMON.DELETE' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </ng-container><!-- /rules tab -->
+
+  <!-- ══ AD ANOMALIES TAB ══════════════════════════════════════ -->
+  <ng-container *ngIf="activeTab === 'ad'">
+
+    <!-- Toolbar -->
+    <div class="ad2-toolbar">
+      <div class="ad2-domain-pills">
+        <button class="ad2-dpill" [class.active]="adDomainFilter === ''"
+                (click)="adDomainFilter=''; loadAdAnomalies()">◉ Tous</button>
+        <button class="ad2-dpill" data-domain="energy" [class.active]="adDomainFilter === 'energy'"
+                (click)="adDomainFilter='energy'; loadAdAnomalies()">⚡ Énergie</button>
+        <button class="ad2-dpill" data-domain="water"  [class.active]="adDomainFilter === 'water'"
+                (click)="adDomainFilter='water'; loadAdAnomalies()">💧 Eau</button>
+        <button class="ad2-dpill" data-domain="gas"    [class.active]="adDomainFilter === 'gas'"
+                (click)="adDomainFilter='gas'; loadAdAnomalies()">🔥 Gaz</button>
+        <button class="ad2-dpill" data-domain="fuel"   [class.active]="adDomainFilter === 'fuel'"
+                (click)="adDomainFilter='fuel'; loadAdAnomalies()">🚗 Carburant</button>
+      </div>
+
+      <div class="ad2-period">
+        <span class="ad2-period-lbl">Période</span>
+        <div class="ad2-period-chips">
+          <button *ngFor="let d of adDayOptions" class="ad2-chip"
+                  [class.active]="adDays === d"
+                  (click)="adDays = d; loadAdAnomalies()">{{ d }}j</button>
+        </div>
+      </div>
+
+      <button class="ad2-refresh-btn" (click)="loadAdAnomalies()" [disabled]="adLoading" title="Actualiser">
+        <svg viewBox="0 0 24 24" [class.ad2-spinning]="adLoading">
+          <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Loading skeletons -->
+    <div class="ad2-loading" *ngIf="adLoading">
+      <div class="ad2-skeletons">
+        <div class="ad2-skel" *ngFor="let _ of [1,2,3,4,5,6]"></div>
+      </div>
+      <div class="ad2-loading-label">
+        <div class="ad2-spinner"></div>
+        <span>Analyse IA des anomalies en cours…</span>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="ad2-empty" *ngIf="!adLoading && adAnomalies.length === 0">
+      <div class="ad2-empty-ring">
+        <svg viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(45,212,191,0.2)" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <circle cx="36" cy="36" r="20" fill="none" stroke="rgba(45,212,191,0.1)" stroke-width="1"/>
+          <path d="M24 36l9 9 15-15" stroke="#2dd4bf" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <p class="ad2-empty-title">Système nominal</p>
+      <p class="ad2-empty-sub">Aucune anomalie IA détectée sur les {{ adDays }} derniers jours</p>
+    </div>
+
+    <!-- Stats ribbon -->
+    <div class="ad2-stats-ribbon" *ngIf="!adLoading && adAnomalies.length > 0">
+      <div class="ad2-stat">
+        <span class="ad2-stat-val">{{ adAnomalies.length }}</span>
+        <span class="ad2-stat-key">Total</span>
+      </div>
+      <div class="ad2-stat-sep"></div>
+      <div class="ad2-stat" data-domain="energy">
+        <span class="ad2-stat-val">{{ adCountByDomain('energy') }}</span>
+        <span class="ad2-stat-key">⚡ Énergie</span>
+      </div>
+      <div class="ad2-stat" data-domain="water">
+        <span class="ad2-stat-val">{{ adCountByDomain('water') }}</span>
+        <span class="ad2-stat-key">💧 Eau</span>
+      </div>
+      <div class="ad2-stat" data-domain="gas">
+        <span class="ad2-stat-val">{{ adCountByDomain('gas') }}</span>
+        <span class="ad2-stat-key">🔥 Gaz</span>
+      </div>
+      <div class="ad2-stat" data-domain="fuel">
+        <span class="ad2-stat-val">{{ adCountByDomain('fuel') }}</span>
+        <span class="ad2-stat-key">🚗 Carburant</span>
+      </div>
+      <div class="ad2-stat-sep"></div>
+      <div class="ad2-stat ad2-stat-critical">
+        <span class="ad2-stat-val">{{ adCriticalCount() }}</span>
+        <span class="ad2-stat-key">Critiques ≥80%</span>
+      </div>
+      <span class="ad2-stat-period">{{ adDays }} derniers jours</span>
+    </div>
+
+    <!-- Card grid -->
+    <div class="ad2-grid" *ngIf="!adLoading && adAnomalies.length > 0">
+      <div class="ad2-card"
+           *ngFor="let a of adAnomalies; trackBy: trackByAdAnomaly"
+           [attr.data-domain]="a.domain"
+           [class.is-critical]="(a.anomaly_score ?? 0) >= 0.8"
+           [class.is-warning]="(a.anomaly_score ?? 0) >= 0.5 && (a.anomaly_score ?? 0) < 0.8">
+
+        <!-- Top domain accent bar -->
+        <div class="ad2-card-bar"></div>
+
+        <div class="ad2-card-inner">
+          <!-- Row 1: domain badge + strategy -->
+          <div class="ad2-card-row1">
+            <span class="ad2-dpill-sm" [attr.data-domain]="a.domain">
+              {{ adDomainIcon(a.domain) }} {{ domainLabel(a.domain) }}
+            </span>
+            <span class="ad2-strategy" [class.hot]="a.strategy === 'hotstart'">
+              {{ a.strategy === 'hotstart' ? '🔥 Hot' : '❄ Cold' }}
+            </span>
+          </div>
+
+          <!-- Row 2: device + timestamp -->
+          <div class="ad2-card-device">{{ a.item_id }}</div>
+          <div class="ad2-card-ts">{{ adFormatTs(a.data_ts) }}</div>
+
+          <!-- Row 3: score ring + value section -->
+          <div class="ad2-card-metrics">
+
+            <!-- Anomaly score donut -->
+            <div class="ad2-score-wrap">
+              <svg viewBox="0 0 48 48" class="ad2-score-svg">
+                <circle cx="24" cy="24" r="19" fill="none"
+                        stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+                <circle cx="24" cy="24" r="19" fill="none"
+                        [attr.stroke]="adScoreColor(a.anomaly_score)"
+                        stroke-width="4"
+                        [attr.stroke-dasharray]="adScoreDash(a.anomaly_score)"
+                        stroke-linecap="round"
+                        transform="rotate(-90 24 24)"/>
+              </svg>
+              <div class="ad2-score-label">
+                <span class="ad2-score-pct">{{ a.anomaly_score != null ? ((a.anomaly_score*100)|number:'1.0-0') : '—' }}</span>
+                <span class="ad2-score-sym">%</span>
+              </div>
+            </div>
+
+            <!-- Value + range bar -->
+            <div class="ad2-value-section">
+              <div class="ad2-value-row">
+                <span class="ad2-value-num"
+                      [class.val-above]="a.value != null && a.q90 != null && a.value > a.q90"
+                      [class.val-below]="a.value != null && a.q10 != null && a.value < a.q10">
+                  {{ a.value != null ? (a.value | number:'1.2-2') : '—' }}
+                </span>
+                <span class="ad2-value-flag flag-above"
+                      *ngIf="a.value != null && a.q90 != null && a.value > a.q90">▲ HAUT</span>
+                <span class="ad2-value-flag flag-below"
+                      *ngIf="a.value != null && a.q10 != null && a.value < a.q10">▼ BAS</span>
+              </div>
+              <div class="ad2-range-bar">
+                <span class="ad2-range-bound">{{ a.q10 != null ? (a.q10|number:'1.1-1') : '?' }}</span>
+                <div class="ad2-range-track">
+                  <div class="ad2-range-zone"></div>
+                  <div class="ad2-range-dot" [style.left.%]="adValuePct(a)"></div>
+                </div>
+                <span class="ad2-range-bound">{{ a.q90 != null ? (a.q90|number:'1.1-1') : '?' }}</span>
+              </div>
+              <div class="ad2-range-hint">Q10 — Q90 · plage normale</div>
+            </div>
+
+          </div><!-- /metrics -->
+        </div><!-- /inner -->
+      </div><!-- /card -->
+    </div><!-- /grid -->
+
+    <div class="ad2-footer" *ngIf="!adLoading && adAnomalies.length > 0">
+      <span>{{ adAnomalies.length }} anomalie(s) détectée(s)</span>
+      <span class="ad2-footer-sep">·</span>
+      <span>{{ adDays }} derniers jours</span>
+    </div>
+
+  </ng-container><!-- /ad tab -->
+
+  <!-- ══ PRÉDICTIONS TAB ════════════════════════════════════════ -->
+  <ng-container *ngIf="activeTab === 'predictions'">
+
+    <!-- Toolbar -->
+    <div class="pred2-toolbar">
+      <div class="pred2-tsection">
+        <span class="pred2-tlabel">Horizon</span>
+        <div class="pred2-hchips">
+          <button *ngFor="let h of predHorizonOptions"
+                  class="pred2-hchip" [class.active]="predHorizon === h"
+                  (click)="predHorizon = h; loadPredictions()">{{ h }}h</button>
+        </div>
+      </div>
+      <div class="pred2-dpills">
+        <button class="pred2-dpill" [class.active]="predDomainFilter === ''"
+                (click)="predDomainFilter = ''; loadPredictions()">Tous</button>
+        <button class="pred2-dpill" data-domain="energy" [class.active]="predDomainFilter === 'energy'"
+                (click)="predDomainFilter = 'energy'; loadPredictions()">⚡ Énergie</button>
+        <button class="pred2-dpill" data-domain="water"  [class.active]="predDomainFilter === 'water'"
+                (click)="predDomainFilter = 'water'; loadPredictions()">💧 Eau</button>
+        <button class="pred2-dpill" data-domain="gas"    [class.active]="predDomainFilter === 'gas'"
+                (click)="predDomainFilter = 'gas'; loadPredictions()">🔥 Gaz</button>
+        <button class="pred2-dpill" data-domain="fuel"   [class.active]="predDomainFilter === 'fuel'"
+                (click)="predDomainFilter = 'fuel'; loadPredictions()">🚗 Carburant</button>
+      </div>
+      <button class="pred2-refresh" (click)="loadPredictions()" [disabled]="predLoading" title="Actualiser">
+        <svg viewBox="0 0 24 24" [class.pred2-spin]="predLoading">
+          <path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div class="pred2-loading" *ngIf="predLoading">
+      <div class="pred2-scanner-bar"></div>
+      <div class="pred2-loading-inner">
+        <div class="pred2-spinner"></div>
+        <span>Analyse Chronos en cours…</span>
+      </div>
+    </div>
+
+    <!-- Empty -->
+    <div class="pred2-empty" *ngIf="!predLoading && predictions.length === 0">
+      <div class="pred2-empty-icon">
+        <svg viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="30" fill="none" stroke="rgba(45,212,191,0.2)" stroke-width="1.5"/>
+          <circle cx="36" cy="36" r="20" fill="none" stroke="rgba(45,212,191,0.08)" stroke-width="1"/>
+          <path d="M24 36l9 9 15-15" stroke="#2dd4bf" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <p class="pred2-empty-title">Système nominal</p>
+      <p class="pred2-empty-sub">Aucune anomalie préventive prévue dans les {{ predHorizon }}h à venir.</p>
+    </div>
+
+    <ng-container *ngIf="!predLoading && predictions.length > 0">
+
+      <!-- Domain health grid -->
+      <div class="pred2-health-grid">
+        <div class="pred2-hcard" *ngFor="let ds of domainStats"
+             [attr.data-domain]="ds.domain" [class.pred2-hcard-active]="ds.total > 0">
+
+          <!-- Pulse indicator for HIGH alerts -->
+          <div class="pred2-hcard-pulse" *ngIf="ds.highCount > 0"></div>
+
+          <div class="pred2-hcard-head">
+            <span class="pred2-hcard-icon">{{ adDomainIcon(ds.domain) }}</span>
+            <span class="pred2-hcard-name">{{ domainLabel(ds.domain) }}</span>
+          </div>
+
+          <!-- Mini ring (shown when active) -->
+          <div class="pred2-hcard-ring-wrap" *ngIf="ds.total > 0">
+            <svg viewBox="0 0 52 52" class="pred2-hring-svg">
+              <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="4"/>
+              <circle cx="26" cy="26" r="22" fill="none" stroke="#f87171" stroke-width="4"
+                      [attr.stroke-dasharray]="(ds.highPct * 1.382).toFixed(1) + ' 138.2'"
+                      stroke-linecap="round" transform="rotate(-90 26 26)"/>
+              <circle cx="26" cy="26" r="22" fill="none" stroke="#fb923c" stroke-width="4" opacity="0.7"
+                      [attr.stroke-dasharray]="(ds.medPct * 1.382).toFixed(1) + ' 138.2'"
+                      stroke-linecap="round"
+                      [style.stroke-dashoffset]="'-' + (ds.highPct * 1.382).toFixed(1)"
+                      transform="rotate(-90 26 26)"/>
+            </svg>
+            <div class="pred2-hring-count">{{ ds.total }}</div>
+          </div>
+
+          <div class="pred2-hcard-count-plain" *ngIf="ds.total === 0">{{ ds.total }}</div>
+          <div class="pred2-hcard-unit">alertes préventives</div>
+
+          <div class="pred2-hcard-bar" *ngIf="ds.total > 0">
+            <div class="pred2-hbar-seg pred2-hbar-high" [style.width.%]="ds.highPct"></div>
+            <div class="pred2-hbar-seg pred2-hbar-med"  [style.width.%]="ds.medPct"></div>
+            <div class="pred2-hbar-seg pred2-hbar-low"  [style.width.%]="ds.lowPct"></div>
+          </div>
+          <div class="pred2-hcard-bar-empty" *ngIf="ds.total === 0"></div>
+
+          <div class="pred2-hcard-ok" *ngIf="ds.total === 0">
+            <svg viewBox="0 0 14 14" style="width:12px;height:12px;fill:currentColor"><path d="M11.5 2.5L5 9 2.5 6.5l-1 1L5 11l7.5-7.5z"/></svg>
+            Normal
+          </div>
+          <div class="pred2-hcard-badges" *ngIf="ds.highCount > 0 || ds.medCount > 0">
+            <span class="pred2-hbadge pred2-hbadge-high" *ngIf="ds.highCount">{{ ds.highCount }} HIGH</span>
+            <span class="pred2-hbadge pred2-hbadge-med"  *ngIf="ds.medCount">{{ ds.medCount }} MED</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary ribbon -->
+      <div class="pred2-ribbon">
+        <div class="pred2-ribbon-left">
+          <span class="pred2-ribbon-num">{{ predictions.length }}</span>
+          <span class="pred2-ribbon-txt">alertes préventives</span>
+        </div>
+        <div class="pred2-ribbon-sevs">
+          <span class="pred2-rsev pred2-rsev-high" *ngIf="predHighCount > 0">
+            <span class="pred2-rsev-dot"></span>{{ predHighCount }} HIGH
+          </span>
+          <span class="pred2-rsev pred2-rsev-med" *ngIf="predMedCount > 0">
+            <span class="pred2-rsev-dot"></span>{{ predMedCount }} MEDIUM
+          </span>
+          <span class="pred2-rsev pred2-rsev-low" *ngIf="predLowCount > 0">
+            <span class="pred2-rsev-dot"></span>{{ predLowCount }} LOW
+          </span>
+        </div>
+        <div class="pred2-ribbon-horizon">Horizon {{ predHorizon }}h</div>
+      </div>
+
+      <!-- Grouped feed -->
+      <div class="pred2-feed">
+        <div class="pred2-group" *ngFor="let group of predGrouped">
+
+          <!-- Group header -->
+          <button class="pred2-ghdr" (click)="toggleGroup(group.id)" [attr.data-sev]="group.severity">
+            <span class="pred2-ghdr-icon">{{ group.icon }}</span>
+            <span class="pred2-ghdr-label">{{ group.label }}</span>
+            <span class="pred2-ghdr-count" [attr.data-sev]="group.severity">{{ group.items.length }}</span>
+            <svg class="pred2-ghdr-chev" [class.open]="isGroupExpanded(group.id)" viewBox="0 0 24 24">
+              <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+            </svg>
+          </button>
+
+          <!-- Cards grid -->
+          <div class="pred2-cards-grid" *ngIf="isGroupExpanded(group.id)">
+
+            <div class="pred2-card" [attr.data-sev]="p.alert_severity"
+                 *ngFor="let p of (isGroupShowAll(group.id) ? group.items : group.items.slice(0, 8))">
+
+              <!-- Severity left stripe -->
+              <div class="pred2-cstripe"></div>
+
+              <div class="pred2-cbody">
+
+                <!-- Row 1: domain + device + countdown -->
+                <div class="pred2-crow1">
+                  <span class="pred2-cdomain" [attr.data-domain]="p.domain">
+                    {{ adDomainIcon(p.domain) }} {{ domainLabel(p.domain) }}
+                  </span>
+                  <span class="pred2-cdevice">{{ p.item_id }}</span>
+                  <span class="pred2-ccountdown" [attr.data-sev]="p.alert_severity">{{ timeToAlert(p.forecast_ts) }}</span>
+                </div>
+
+                <!-- Row 2: range + confidence ring -->
+                <div class="pred2-crow2">
+                  <div class="pred2-crange">
+                    <div class="pred2-crange-lbl">Valeur prédite</div>
+                    <ng-container *ngIf="!isOfflineDevice(p); else offlineBar">
+                      <div class="pred2-crange-track">
+                        <div class="pred2-crange-fill" [attr.data-sev]="p.alert_severity"></div>
+                        <div class="pred2-crange-tick" [style.left.%]="medianPct(p)"></div>
+                      </div>
+                      <div class="pred2-crange-vals">
+                        <span class="pred2-crv-lo">{{ p.forecast_low  | number:'1.2-2' }}</span>
+                        <span class="pred2-crv-med" [attr.data-sev]="p.alert_severity">{{ p.forecast_median | number:'1.2-2' }}</span>
+                        <span class="pred2-crv-hi">{{ p.forecast_high | number:'1.2-2' }}</span>
+                      </div>
+                    </ng-container>
+                    <ng-template #offlineBar>
+                      <div class="pred2-coffline">Hors-ligne · 0.00</div>
+                    </ng-template>
+                  </div>
+
+                  <!-- Confidence ring -->
+                  <div class="pred2-cconf">
+                    <svg viewBox="0 0 36 36" class="pred2-cconf-svg">
+                      <circle cx="18" cy="18" r="14" fill="none"
+                              stroke="rgba(255,255,255,0.07)" stroke-width="3.5"/>
+                      <circle cx="18" cy="18" r="14" fill="none"
+                              [attr.stroke]="confColor(p.confidence)"
+                              stroke-width="3.5"
+                              [attr.stroke-dasharray]="confDashArray(p.confidence)"
+                              stroke-linecap="round"
+                              transform="rotate(-90 18 18)"/>
+                    </svg>
+                    <span class="pred2-cconf-val">{{ confLabel(p.confidence) }}</span>
+                    <span class="pred2-cconf-lbl">conf.</span>
+                  </div>
+                </div>
+
+                <!-- Row 3: col + date + severity badge -->
+                <div class="pred2-crow3">
+                  <span class="pred2-ccol">{{ p.forecast_col }}</span>
+                  <span class="pred2-cts">{{ p.forecast_ts | date:'dd/MM HH:mm' }}</span>
+                  <span class="pred2-csev" [attr.data-sev]="p.alert_severity">
+                    {{ sevIcon(p.alert_severity) }} {{ p.alert_severity }}
+                  </span>
+                </div>
+
+              </div>
+            </div><!-- /pred2-card -->
+
+            <!-- Show more -->
+            <button class="pred2-show-more"
+                    *ngIf="group.items.length > 8 && !isGroupShowAll(group.id)"
+                    (click)="showAllInGroup(group.id)">
+              <svg viewBox="0 0 24 24"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg>
+              Afficher {{ group.items.length - 8 }} alertes de plus
+            </button>
+
+          </div><!-- /cards-grid -->
+        </div><!-- /group -->
+      </div><!-- /feed -->
+
+      <div class="pred2-footer">
+        {{ predictions.length }} alerte(s) préventive(s) · Horizon {{ predHorizon }}h
+      </div>
+
+    </ng-container>
+
+  </ng-container><!-- /predictions tab -->
+
+</div>

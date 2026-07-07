@@ -1,0 +1,125 @@
+
+# ── Données ──────────────────────────────────────────────────────────────────
+donnees:
+
+  # CSV du nouveau device eau (données réelles partielles — peut être vide au démarrage)
+  fichier_nouveau_device: ""
+
+  # CSV des devices eau existants = source des profils statistiques de population
+  fichier_population: "water.csv"   # chemin vers le CSV population — à configurer
+
+  # Dossier de sortie
+  dossier_resultats: "outputs/coldstart_water"
+
+  # ── Filtre de période (optionnel) ─────────────────────────────────────────
+  #date_debut: "2025-01-01"
+  #date_fin:   "2025-06-30"
+
+
+# ── Nouveau device ────────────────────────────────────────────────────────────
+nouveau_device:
+
+  # Identifiant du nouveau device (doit être absent du fichier_population)
+  id: "NEW_WATER_001"
+
+  # Eau : pas de phases — item_id = id_device directement
+
+
+# ── Colonnes ─────────────────────────────────────────────────────────────────
+colonnes:
+  timestamp:  "date"
+  valeur:
+    - conso
+  item_id:    "item_id"
+  device:     "id_device"
+  # Pas de colonne 'phase' pour l'eau
+
+
+# ── Algorithmes de détection cold start ─────────────────────────────────────
+algorithmes:
+
+  # Mode : "zscore" | "iqr" | "isolation_forest" | "chronos" | "ensemble"
+  mode: "ensemble"
+
+  # Pour l'ensemble : nombre minimum d'algorithmes devant signaler une anomalie
+  min_votes_anomalie: 2
+
+  zscore:
+    # Eau : distribution souvent log-normale avec queue lourde
+    # 2.5σ pour capter les pics de fuite sans trop de faux positifs
+    seuil: 2.5
+
+  iqr:
+    # Multiplicateur IQR — eau : distribution asymétrique (beaucoup de zéros)
+    # 2.0 pour être plus permissif (IQR souvent très petit sur séries eau)
+    multiplicateur: 2.0
+
+  isolation_forest:
+    contamination: 0.05
+    n_estimateurs: 100
+    max_samples: 256
+
+
+# ── Chronos zero-shot (FPT) ───────────────────────────────────────────────────
+chronos:
+  modele: "autogluon/chronos-t5-tiny"
+  accelerateur: "cpu"
+  contexte: 48
+  horizon: 12
+  num_samples: 20
+  q_bas:  0.1
+  q_haut: 0.9
+  k_sigma: 1.5   # plus tolérant : eau très variable (logs-normale)
+  actif: true
+
+
+# ── Profil de population ──────────────────────────────────────────────────────
+profil:
+
+  # Nombre minimum de devices valides pour construire un profil fiable
+  min_devices: 1
+
+  # Filtres de qualité sur la population (identiques à HotStart water)
+  min_lignes_device: 48        # devices avec moins de N lignes brutes → exclus
+  max_pct_offline: 0.90        # devices avec > X% de zéros (offline) → exclus
+
+  # Correction rollover compteur avant calcul de profil
+  # Fence = Q3_trim + facteur × IQR_trim (robuste aux rares rollovers)
+  facteur_rollover: 30.0
+
+
+# ── Données synthétiques ──────────────────────────────────────────────────────
+synthese:
+
+  # Jours de données synthétiques à générer
+  jours: 30
+
+  # Graine aléatoire pour reproductibilité
+  graine: 42
+
+  # Facteur de bruit : 0 = pattern pur, 1 = bruit plein σ
+  # Eau : 0.9 car consommation eau très variable (différents usages)
+  facteur_bruit: 0.9
+
+  # Fraction de pics anormaux injectés (fuites, ruptures de conduite)
+  taux_anomalies_synthetiques: 0.02
+
+  # Fraction de zéros ajoutés (offline simulé — eau : fréquent)
+  taux_offline_synthetique: 0.10
+
+
+# ── Warmup progressif ─────────────────────────────────────────────────────────
+warmup:
+
+  # 168h = 7 jours de vraies données avant de recommander HotStart
+  heures: 336
+
+
+# ── Paramètres avancés ────────────────────────────────────────────────────────
+avance:
+
+  frequence: "1h"
+  limite_completion: 3
+
+  # Eau : régime = dégâts des eaux continus (≥ 48h)
+  seuil_regime_heures: 48

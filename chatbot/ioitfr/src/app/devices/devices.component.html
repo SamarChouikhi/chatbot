@@ -1,0 +1,292 @@
+<div class="crud-page">
+
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1 class="page-title">{{ 'DEVICES_PAGE.TITLE' | translate }}</h1>
+      <span class="page-sub">{{ 'DEVICES_PAGE.DEVICE_COUNT' | translate: {count: filteredDevices.length} }}</span>
+    </div>
+    <button class="btn btn-primary" (click)="openModal('create')">
+      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      {{ 'DEVICES_PAGE.NEW_DEVICE' | translate }}
+    </button>
+  </div>
+
+  <div class="success-banner" *ngIf="successMsg">
+    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    {{ successMsg }}
+    <button (click)="successMsg=''">✕</button>
+  </div>
+
+  <div class="error-banner" *ngIf="errorMsg">
+    <svg viewBox="0 0 24 24"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+    {{ errorMsg }}
+    <button (click)="errorMsg=''">✕</button>
+  </div>
+
+  <div class="filters-bar">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.5 6.5 0 1 0 14 15.5l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input type="text" [placeholder]="'DEVICES_PAGE.SEARCH_PLACEHOLDER' | translate"
+             [(ngModel)]="searchQuery" (input)="applyFilters()"/>
+      <button class="clear-btn" *ngIf="searchQuery" (click)="clearSearch()">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="filter-group">
+      <select [(ngModel)]="filterType" (change)="applyFilters()" class="filter-select">
+        <option value="">{{ 'DEVICES_PAGE.ALL_TYPES' | translate }}</option>
+        <option value="1">{{ 'DEVICES_PAGE.TYPE_ELEC' | translate }}</option>
+        <option value="2">{{ 'DEVICES_PAGE.TYPE_WATER' | translate }}</option>
+        <option value="3">{{ 'DEVICES_PAGE.TYPE_GAS' | translate }}</option>
+        <option value="4">{{ 'DEVICES_PAGE.TYPE_FUEL' | translate }}</option>
+      </select>
+      <select [(ngModel)]="filterGeneral" (change)="applyFilters()" class="filter-select">
+        <option value="">{{ 'DEVICES_PAGE.ALL' | translate }}</option>
+        <option value="1">{{ 'DEVICES_PAGE.GENERAL_METER' | translate }}</option>
+        <option value="0">{{ 'DEVICES_PAGE.STANDARD' | translate }}</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th (click)="sort('nom')" class="sortable">{{ 'DEVICES_PAGE.COL_NAME' | translate }} <span class="sort-icon" [class.active]="sortField==='nom'">↕</span></th>
+            <th>{{ 'DEVICES_PAGE.COL_DESC' | translate }}</th>
+            <th (click)="sort('type')" class="sortable">{{ 'DEVICES_PAGE.COL_TYPE' | translate }} <span class="sort-icon" [class.active]="sortField==='type'">↕</span></th>
+            <th>{{ 'DEVICES_PAGE.COL_SPACE' | translate }}</th>
+            <th>{{ 'DEVICES_PAGE.COL_GENERAL' | translate }}</th>
+            <th>{{ 'DEVICES_PAGE.COL_LAST_INDEX' | translate }}</th>
+            <th>{{ 'DEVICES_PAGE.COL_MAX_UPTIME' | translate }}</th>
+            <th class="col-actions">{{ 'DEVICES_PAGE.COL_ACTIONS' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngIf="isLoading">
+            <td colspan="9" class="loading-cell">
+              <div class="loader-dots"><span></span><span></span><span></span></div>
+            </td>
+          </tr>
+          <tr *ngIf="!isLoading && filteredDevices.length === 0">
+            <td colspan="9" class="empty-cell">{{ 'DEVICES_PAGE.NO_DEVICES' | translate }}</td>
+          </tr>
+          <tr *ngFor="let d of pagedDevices; trackBy: trackById">
+            <td>
+              <div class="device-cell">
+                <div class="device-icon-sm" [class]="'type-' + d.type"></div>
+                <span>{{ d.nom || '—' }}</span>
+              </div>
+            </td>
+            <td class="text-muted text-ellipsis">{{ d.description || '—' }}</td>
+            <td>
+              <span class="type-chip" [ngClass]="d.type ? 'type-chip-' + d.type : ''">
+                <svg *ngIf="d.type === 1" viewBox="0 0 24 24" class="chip-icon"><path d="M7 2v11h3v9l7-12h-4l4-8z"/></svg>
+                <svg *ngIf="d.type === 2" viewBox="0 0 24 24" class="chip-icon"><path d="M12 2c-5.33 4.55-8 8.48-8 11.8 0 4.98 3.8 8.2 8 8.2s8-3.22 8-8.2c0-3.32-2.67-7.25-8-11.8z"/></svg>
+                <svg *ngIf="d.type === 3" viewBox="0 0 24 24" class="chip-icon"><path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
+                <svg *ngIf="d.type === 4" viewBox="0 0 24 24" class="chip-icon"><path d="M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77zM18 10c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zM8 18v-4.5H6V18H4V5h8v13H8z"/></svg>
+                {{ getTypeLabel(d.type) }}
+              </span>
+            </td>
+            <td class="text-muted">{{ d.id_espace }}</td>
+            <td>
+              <span class="badge"
+                    [class.badge-blue]="d.is_general_meter == 1"
+                    [class.badge-gray]="d.is_general_meter != 1">
+                {{ d.is_general_meter == 1 ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}
+              </span>
+            </td>
+            <td class="mono">{{ d.last_saved_index != null ? d.last_saved_index.toFixed(2) : '—' }}</td>
+            <td class="text-muted">{{ d.max_uptime != null ? d.max_uptime + ' h' : '—' }}</td>
+            <td class="col-actions">
+              <div class="actions-group">
+                <button class="action-btn view-btn" (click)="openModal('view', d)" [title]="'COMMON.VIEW' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                </button>
+                <button class="action-btn edit-btn" (click)="openModal('edit', d)" [title]="'COMMON.EDIT' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </button>
+                <button class="action-btn delete-btn" (click)="confirmDelete(d)" [title]="'COMMON.DELETE' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="pagination" *ngIf="totalPages > 1">
+      <button class="page-btn" [disabled]="currentPage===1" (click)="goToPage(currentPage-1)">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <button class="page-btn" *ngFor="let p of pageNumbers"
+              [class.active]="p===currentPage" (click)="goToPage(p)">{{ p }}</button>
+      <button class="page-btn" [disabled]="currentPage===totalPages" (click)="goToPage(currentPage+1)">
+        <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+      <span class="page-info">
+        {{ (currentPage-1)*pageSize+1 }} – {{ min(currentPage*pageSize, filteredDevices.length) }} / {{ filteredDevices.length }}
+      </span>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  MODAL CREATE / EDIT / VIEW                                 -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="modalMode" (click)="closeModalOnBackdrop($event)">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title">
+          {{ modalMode === 'create' ? ('DEVICES_PAGE.MODAL_CREATE' | translate)
+           : modalMode === 'edit'   ? ('DEVICES_PAGE.MODAL_EDIT'   | translate: {id: selectedDevice?.id})
+           :                          ('DEVICES_PAGE.MODAL_VIEW'   | translate: {id: selectedDevice?.id}) }}
+        </h2>
+        <button class="modal-close" (click)="closeModal()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+
+      <form class="modal-body" [formGroup]="deviceForm" (ngSubmit)="saveDevice()">
+        <div class="error-banner" *ngIf="errorMsg">{{ errorMsg }}</div>
+
+        <p class="section-title-divider">{{ 'DEVICES_PAGE.SECTION_IDS' | translate }}</p>
+        <div class="form-row">
+          <div class="form-group" [class.has-error]="isInvalid('id')">
+            <label>{{ 'DEVICES_PAGE.LABEL_ID' | translate }} <span class="required" *ngIf="modalMode==='create'">*</span></label>
+            <input type="number" formControlName="id" placeholder="ex: 1"/>
+            <span class="error-msg" *ngIf="isInvalid('id')">{{ 'DEVICES_PAGE.ERR_ID' | translate }}</span>
+          </div>
+          <div class="form-group" [class.has-error]="isInvalid('adresse')">
+            <label>{{ 'DEVICES_PAGE.LABEL_ADDRESS' | translate }} <span class="required" *ngIf="modalMode==='create'">*</span></label>
+            <input type="number" formControlName="adresse" placeholder="ex: 1"/>
+            <span class="error-msg" *ngIf="isInvalid('adresse')">{{ 'DEVICES_PAGE.ERR_ADDRESS' | translate }}</span>
+          </div>
+        </div>
+
+        <p class="section-title-divider">{{ 'DEVICES_PAGE.SECTION_INFO' | translate }}</p>
+        <div class="form-row">
+          <div class="form-group" [class.has-error]="isInvalid('nom')">
+            <label>{{ 'DEVICES_PAGE.COL_NAME' | translate }} <span class="required">*</span></label>
+            <input type="text" formControlName="nom" [placeholder]="'DEVICES_PAGE.LABEL_NAME' | translate"/>
+            <span class="error-msg" *ngIf="isInvalid('nom')">{{ 'DEVICES_PAGE.ERR_NAME' | translate }}</span>
+          </div>
+          <div class="form-group" [class.has-error]="isInvalid('type')">
+            <label>{{ 'DEVICES_PAGE.LABEL_TYPE' | translate }} <span class="required">*</span></label>
+            <select formControlName="type">
+              <option value="">{{ 'DEVICES_PAGE.SELECT_TYPE' | translate }}</option>
+              <option value="1">{{ 'DEVICES_PAGE.TYPE_ELEC' | translate }}</option>
+              <option value="2">{{ 'DEVICES_PAGE.TYPE_WATER' | translate }}</option>
+              <option value="3">{{ 'DEVICES_PAGE.TYPE_GAS' | translate }}</option>
+              <option value="4">{{ 'DEVICES_PAGE.TYPE_FUEL' | translate }}</option>
+            </select>
+            <span class="error-msg" *ngIf="isInvalid('type')">{{ 'DEVICES_PAGE.ERR_TYPE' | translate }}</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>{{ 'DEVICES_PAGE.LABEL_OWNER' | translate }}</label>
+            <div class="owner-field">
+              <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+              <span>{{ deviceForm.get('login')?.value || '—' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>{{ 'DEVICES_PAGE.COL_DESC' | translate }}</label>
+            <textarea formControlName="description" rows="2" [placeholder]="'DEVICES_PAGE.LABEL_DESC' | translate"></textarea>
+          </div>
+        </div>
+
+        <p class="section-title-divider">{{ 'DEVICES_PAGE.SECTION_CONFIG' | translate }}</p>
+        <div class="form-row">
+          <div class="form-group" [class.has-error]="isInvalid('id_espace')">
+            <label>{{ 'DEVICES_PAGE.LABEL_SPACE_ID' | translate }} <span class="required">*</span></label>
+            <input type="number" formControlName="id_espace" placeholder="ex: 1"/>
+            <span class="error-msg" *ngIf="isInvalid('id_espace')">{{ 'DEVICES_PAGE.ERR_SPACE' | translate }}</span>
+          </div>
+          <div class="form-group">
+            <label>{{ 'DEVICES_PAGE.LABEL_LS_ID' | translate }}</label>
+            <input type="number" formControlName="id_ls"/>
+          </div>
+          <div class="form-group">
+            <label>{{ 'DEVICES_PAGE.LABEL_MAX_UPTIME' | translate }}</label>
+            <input type="number" formControlName="max_uptime" placeholder="ex: 8760"/>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>{{ 'DEVICES_PAGE.LABEL_LAST_INDEX' | translate }}</label>
+            <input type="number" step="0.01" formControlName="last_saved_index"/>
+          </div>
+          <div class="form-group">
+            <label>{{ 'DEVICES_PAGE.LABEL_GENERAL_METER' | translate }}</label>
+            <div class="toggle-group">
+              <button type="button" class="toggle-opt"
+                      [class.active]="deviceForm.get('is_general_meter')?.value == 0"
+                      (click)="deviceForm.get('is_general_meter')?.setValue(0)">{{ 'COMMON.NO' | translate }}</button>
+              <button type="button" class="toggle-opt"
+                      [class.active]="deviceForm.get('is_general_meter')?.value == 1"
+                      (click)="deviceForm.get('is_general_meter')?.setValue(1)">{{ 'COMMON.YES' | translate }}</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group" style="grid-column:1/-1">
+            <label>{{ 'DEVICES_PAGE.LABEL_GEOMETRY' | translate }}</label>
+            <textarea formControlName="geometry" rows="2" class="mono-input"
+                      placeholder='{"type":"Point","coordinates":[10.18,36.81]}'></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" (click)="closeModal()">
+            {{ (modalMode === 'view' ? 'COMMON.CLOSE' : 'COMMON.CANCEL') | translate }}
+          </button>
+          <button type="submit" class="btn btn-primary"
+                  *ngIf="modalMode !== 'view'"
+                  [disabled]="isSaving || deviceForm.invalid">
+            <span class="btn-spinner" *ngIf="isSaving"></span>
+            {{ (modalMode === 'create' ? 'COMMON.CREATE' : 'COMMON.SAVE') | translate }}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  MODAL SUPPRESSION                                          -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="showDeleteConfirm" (click)="showDeleteConfirm = false">
+    <div class="modal modal-sm" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title danger">{{ 'DEVICES_PAGE.DELETE_TITLE' | translate }}</h2>
+        <button class="modal-close" (click)="showDeleteConfirm = false">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="confirm-msg">
+          {{ 'DEVICES_PAGE.DELETE_CONFIRM' | translate: {name: deviceToDelete?.nom || ('#' + deviceToDelete?.id)} }}<br>
+          <span class="text-muted">{{ 'COMMON.IRREVERSIBLE' | translate }}</span>
+        </p>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" (click)="showDeleteConfirm = false">{{ 'COMMON.CANCEL' | translate }}</button>
+          <button class="btn btn-danger" (click)="deleteDevice()" [disabled]="isSaving">
+            <span class="btn-spinner" *ngIf="isSaving"></span>
+            {{ 'COMMON.DELETE' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<app-chatbot></app-chatbot>
+
+</div>

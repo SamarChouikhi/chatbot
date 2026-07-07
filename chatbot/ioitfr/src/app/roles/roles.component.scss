@@ -1,0 +1,351 @@
+$bg:      #060c1a;
+$card:    rgba(255,255,255,0.04);
+$border:  rgba(255,255,255,0.08);
+$hover:   rgba(255,255,255,0.07);
+$text:    #ffffff;
+$muted:   rgba(255,255,255,0.45);
+$primary: #0052ff;
+$green:   #2ecc71;
+$red:     #e74c3c;
+$font:    'Inter', -apple-system, sans-serif;
+$radius:  0.75rem;
+$tr:      200ms ease;
+
+@keyframes fadeIn { from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)} }
+@keyframes spin   { to{transform:rotate(360deg)} }
+@keyframes dots   { 0%,80%,100%{transform:scale(0);opacity:.3}40%{transform:scale(1);opacity:1} }
+
+:host {
+  display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden;
+}
+
+.roles-page {
+  flex: 1; min-height: 0; overflow-y: auto;
+  background: $bg; color: $text;
+  font-family: $font; padding: 1.5rem; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 1rem;
+}
+
+// ── Header ──────────────────────────────────────────────────────
+.page-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; flex-wrap: wrap;
+}
+.page-header-left { flex: 1; }
+.page-title { font-size: 1.4rem; font-weight: 700; margin: 0; }
+.page-sub   { font-size: .82rem; color: $muted; margin-top: .2rem; display: block; }
+
+// ── View tabs ────────────────────────────────────────────────────
+.view-tabs {
+  display: flex; background: rgba(255,255,255,.05); border: 1px solid $border;
+  border-radius: .6rem; padding: .2rem; gap: .2rem;
+
+  button {
+    display: flex; align-items: center; gap: .4rem;
+    padding: .45rem .9rem; border: none; border-radius: .4rem;
+    background: transparent; color: $muted; font-size: .82rem;
+    font-weight: 500; cursor: pointer; transition: all $tr;
+    svg { width: .95rem; height: .95rem; }
+
+    &.active { background: $primary; color: #fff; }
+    &:not(.active):hover { background: $hover; color: $text; }
+  }
+}
+
+// ── Banners ──────────────────────────────────────────────────────
+.banner {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .7rem 1rem; border-radius: $radius;
+  font-size: .875rem; animation: fadeIn $tr;
+  button { background: none; border: none; color: inherit; cursor: pointer; font-size: 1rem; }
+}
+.banner-error   { background: rgba(231,76,60,.15);  color: #ff6b6b; border: 1px solid rgba(231,76,60,.3); }
+.banner-success { background: rgba(46,204,113,.15); color: #2ecc71; border: 1px solid rgba(46,204,113,.3); }
+
+// ── Loader ───────────────────────────────────────────────────────
+.loading-wrap { display: flex; justify-content: center; padding: 3rem; }
+.loader-dots  {
+  display: flex; gap: .4rem;
+  span { width: .6rem; height: .6rem; border-radius: 50%; background: $primary;
+    animation: dots 1.4s infinite;
+    &:nth-child(2) { animation-delay: .2s }
+    &:nth-child(3) { animation-delay: .4s }
+  }
+}
+
+// ── Roles layout (two-column) ────────────────────────────────────
+.roles-layout {
+  display: grid; grid-template-columns: 280px 1fr; gap: 1.25rem; flex: 1; min-height: 0;
+  @media(max-width:768px) { grid-template-columns: 1fr; }
+}
+
+// ── Role list ────────────────────────────────────────────────────
+.roles-list { display: flex; flex-direction: column; gap: .4rem; }
+
+.list-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: .35rem;
+}
+.list-title {
+  font-size: .75rem; font-weight: 600; color: $muted;
+  text-transform: uppercase; letter-spacing: .08em;
+}
+
+.btn-add {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .35rem .75rem; border-radius: .45rem;
+  background: rgba(0,82,255,.15); border: 1px solid rgba(0,82,255,.35);
+  color: lighten($primary, 20%); font-size: .78rem; font-weight: 600;
+  cursor: pointer; transition: all $tr;
+  svg { width: .9rem; height: .9rem; }
+  &:hover { background: rgba(0,82,255,.25); }
+}
+
+.role-card {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .8rem 1rem; background: $card;
+  border: 1px solid $border; border-radius: $radius;
+  cursor: pointer; transition: background $tr, border-color $tr;
+
+  &:hover        { background: $hover; border-color: rgba(255,255,255,.14); }
+  &.active       { background: rgba(0,82,255,.12); border-color: rgba(0,82,255,.4); }
+  &:hover .card-actions { opacity: 1; }
+}
+.role-avatar {
+  width: 2.25rem; height: 2.25rem; border-radius: .5rem; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .72rem; font-weight: 700; color: #fff;
+}
+.role-info  { flex: 1; min-width: 0; }
+.role-name  { font-size: .875rem; font-weight: 600; }
+.role-perms { font-size: .75rem; color: $muted; margin-top: .1rem; }
+
+.card-actions {
+  display: flex; gap: .25rem; opacity: 0; transition: opacity $tr;
+}
+
+.empty-list {
+  font-size: .85rem; color: $muted; text-align: center; padding: 1.5rem;
+}
+
+// ── Permissions panel (right column) ────────────────────────────
+.perms-panel {
+  background: $card; border: 1px solid $border; border-radius: $radius;
+  display: flex; flex-direction: column; animation: fadeIn .2s; overflow: hidden;
+}
+.perms-header {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 1.1rem 1.4rem; border-bottom: 1px solid $border; flex-shrink: 0;
+}
+.perms-role-badge {
+  width: 2.75rem; height: 2.75rem; border-radius: .65rem; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .78rem; font-weight: 700; color: #fff;
+}
+.perms-title { font-size: 1rem; font-weight: 700; margin: 0; }
+.perms-sub   { font-size: .78rem; color: $muted; }
+
+.perms-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: .45rem; padding: 1.1rem 1.4rem; flex: 1; overflow-y: auto;
+}
+
+.perm-item {
+  display: flex; align-items: flex-start; gap: .65rem;
+  padding: .65rem .75rem; border-radius: .5rem; border: 1px solid $border;
+  cursor: pointer; transition: background $tr, border-color $tr;
+  input[type=checkbox] { display: none; }
+  &:hover   { background: $hover; }
+  &.checked { background: rgba(0,82,255,.08); border-color: rgba(0,82,255,.35); }
+}
+.perm-check {
+  width: 1.15rem; height: 1.15rem; border-radius: .3rem; flex-shrink: 0; margin-top: .1rem;
+  border: 2px solid rgba(255,255,255,.25); background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  transition: background $tr, border-color $tr;
+  svg { width: .8rem; height: .8rem; }
+  .perm-item.checked & { background: $primary; border-color: $primary; }
+}
+.perm-text  { display: flex; flex-direction: column; gap: .15rem; flex: 1; min-width: 0; }
+.perm-label { font-size: .82rem; font-weight: 500; }
+.perm-key   { font-size: .68rem; color: $muted; font-family: monospace; }
+
+.perms-footer {
+  padding: .9rem 1.4rem; border-top: 1px solid $border;
+  display: flex; justify-content: flex-end; flex-shrink: 0;
+}
+
+// ── Permissions view (full-width tab) ────────────────────────────
+.perms-view { display: flex; flex-direction: column; gap: .75rem; flex: 1; }
+
+.perms-view-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.perm-table {
+  background: $card; border: 1px solid $border; border-radius: $radius;
+  overflow: hidden;
+}
+.perm-table-head {
+  display: grid; grid-template-columns: 1fr 1fr auto;
+  padding: .65rem 1.1rem; background: rgba(255,255,255,.04);
+  border-bottom: 1px solid $border;
+  font-size: .72rem; font-weight: 600; color: $muted;
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.perm-table-row {
+  display: grid; grid-template-columns: 1fr 1fr auto;
+  align-items: center; padding: .7rem 1.1rem;
+  border-bottom: 1px solid $border; transition: background $tr;
+  &:last-child { border-bottom: none; }
+  &:hover { background: $hover; }
+}
+.perm-key-cell   { font-size: .8rem; font-family: monospace; color: lighten($primary, 15%); }
+.perm-label-cell { font-size: .82rem; color: rgba(255,255,255,.75); }
+.perm-row-actions { display: flex; gap: .25rem; }
+
+.perm-table-empty {
+  padding: 2rem; text-align: center; color: $muted; font-size: .85rem;
+}
+
+// ── Icon buttons ─────────────────────────────────────────────────
+.btn-icon {
+  display: flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; border-radius: .4rem;
+  background: transparent; border: 1px solid transparent;
+  color: $muted; cursor: pointer; transition: all $tr;
+  svg { width: .9rem; height: .9rem; fill: currentColor; }
+  &:hover { background: $hover; border-color: $border; color: $text; }
+
+  &.btn-icon-danger {
+    &:hover { background: rgba(231,76,60,.15); border-color: rgba(231,76,60,.35); color: $red; }
+  }
+}
+
+// ── Buttons ──────────────────────────────────────────────────────
+.btn {
+  display: inline-flex; align-items: center; gap: .45rem;
+  padding: .55rem 1.1rem; border-radius: .5rem; border: none;
+  cursor: pointer; font-size: .85rem; font-weight: 600;
+  transition: opacity $tr, background $tr;
+  &:disabled { opacity: .5; cursor: not-allowed; }
+  svg { width: 1rem; height: 1rem; }
+}
+.btn-primary { background: $primary; color: #fff; &:hover:not(:disabled) { opacity: .85; } }
+.btn-danger  { background: $red;     color: #fff; &:hover:not(:disabled) { opacity: .85; } }
+.btn-ghost {
+  background: transparent; color: $muted;
+  border: 1px solid $border;
+  &:hover:not(:disabled) { background: $hover; color: $text; }
+}
+
+.btn-spinner {
+  width: .9rem; height: .9rem; border: 2px solid rgba(255,255,255,.3);
+  border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite;
+}
+
+// ── Empty state ──────────────────────────────────────────────────
+.no-selection {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1rem; background: $card; border: 1px dashed $border; border-radius: $radius;
+  padding: 3rem; color: $muted; text-align: center;
+  svg { width: 3rem; height: 3rem; opacity: .25; fill: currentColor; }
+  p   { font-size: .9rem; margin: 0; }
+}
+
+// ── Modals ───────────────────────────────────────────────────────
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.65);
+  backdrop-filter: blur(4px); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn .15s;
+}
+
+.modal {
+  background: #0d1529; border: 1px solid rgba(255,255,255,.12);
+  border-radius: 1rem; width: 440px; max-width: calc(100vw - 2rem);
+  box-shadow: 0 24px 64px rgba(0,0,0,.6); animation: fadeIn .2s;
+
+  &.modal-sm { width: 380px; }
+}
+
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1.1rem 1.4rem; border-bottom: 1px solid $border;
+  h3 { font-size: 1rem; font-weight: 700; margin: 0; }
+}
+
+.modal-body {
+  padding: 1.25rem 1.4rem;
+  display: flex; flex-direction: column; gap: .6rem;
+}
+
+.modal-footer {
+  padding: 1rem 1.4rem; border-top: 1px solid $border;
+  display: flex; justify-content: flex-end; gap: .5rem;
+}
+
+.form-label { font-size: .8rem; font-weight: 600; color: $muted; }
+
+.form-input {
+  width: 100%; padding: .65rem .85rem; border-radius: .5rem;
+  background: rgba(255,255,255,.06); border: 1px solid $border;
+  color: $text; font-size: .875rem; font-family: $font;
+  outline: none; box-sizing: border-box; transition: border-color $tr;
+  &:focus { border-color: rgba(0,82,255,.6); background: rgba(255,255,255,.08); }
+  &::placeholder { color: $muted; }
+}
+
+.form-hint { font-size: .75rem; color: $muted; }
+
+.delete-msg  { font-size: .9rem; margin: 0; strong { color: $text; } }
+.delete-warn { font-size: .8rem; color: rgba(255,180,50,.8); margin: .5rem 0 0; }
+
+// ═══════════════════════════════════════════════
+// LIGHT THEME
+// ═══════════════════════════════════════════════
+:host-context(html.light-theme) {
+  .roles-page       { background: #f0f2f5 !important; color: #0f172a; }
+  .page-title       { color: #0f172a; }
+  .page-sub         { color: rgba(0,0,0,0.45); }
+  .list-title       { color: rgba(0,0,0,0.35); }
+  // View tabs
+  .view-tabs        { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1);
+    button          { color: rgba(0,0,0,0.45);
+      &:not(.active):hover { background: rgba(0,0,0,0.05); color: #0f172a; } } }
+  // Role list cards
+  .role-card        { background: #ffffff; border-color: rgba(0,0,0,0.08);
+    &:hover         { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.14); }
+    &.active        { background: rgba(37,99,235,0.07); border-color: rgba(37,99,235,0.3); } }
+  .role-name        { color: #0f172a; }
+  .role-perms       { color: rgba(0,0,0,0.45); }
+  .empty-list       { color: rgba(0,0,0,0.4); }
+  // Permissions panel
+  .perms-panel      { background: #ffffff; border-color: rgba(0,0,0,0.08); }
+  .perms-header     { border-bottom-color: rgba(0,0,0,0.08); }
+  .perms-title      { color: #0f172a; }
+  .perms-sub        { color: rgba(0,0,0,0.45); }
+  .perms-footer     { border-top-color: rgba(0,0,0,0.08); }
+  // Permission items (checkboxes)
+  .perm-item        { border-color: rgba(0,0,0,0.08);
+    &:hover         { background: rgba(0,0,0,0.03); }
+    &.checked       { background: rgba(37,99,235,0.06); border-color: rgba(37,99,235,0.3); } }
+  .perm-check       { border-color: rgba(0,0,0,0.2); }
+  .perm-label       { color: #0f172a; }
+  .perm-key         { color: rgba(0,0,0,0.4); }
+  // Permissions table view
+  .perm-table       { background: #ffffff; border-color: rgba(0,0,0,0.08); }
+  .perm-table-head  { background: rgba(0,0,0,0.03); border-bottom-color: rgba(0,0,0,0.08); color: rgba(0,0,0,0.45); }
+  .perm-table-row   { border-bottom-color: rgba(0,0,0,0.05);
+    &:hover         { background: rgba(0,0,0,0.02); } }
+  .perm-label-cell  { color: #0f172a; }
+  .perm-table-empty { color: rgba(0,0,0,0.4); }
+  // Modal / form
+  .modal            { background: #ffffff; border-color: rgba(0,0,0,0.1); }
+  .modal-header     { border-bottom-color: rgba(0,0,0,0.08); color: #0f172a; }
+  .modal-footer     { border-top-color: rgba(0,0,0,0.08); }
+  .form-group label { color: rgba(0,0,0,0.6); }
+  .form-group input, .form-group select, .form-group textarea {
+    background: #f8fafc; border-color: rgba(0,0,0,0.12); color: #0f172a; }
+  .form-hint        { color: rgba(0,0,0,0.4); }
+}

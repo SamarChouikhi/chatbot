@@ -1,0 +1,484 @@
+<div class="crud-page">
+
+  <!-- ── Header ─────────────────────────────────────────────── -->
+  <div class="page-header">
+    <div class="page-header-left">
+      <h1 class="page-title">{{ 'USERS_PAGE.TITLE' | translate }}</h1>
+      <span class="page-sub">{{ total }} {{ 'COMMON.METERS' | translate }}</span>
+    </div>
+    <button *ngIf="isSuperAdmin" class="btn btn-primary" (click)="openCreate()">
+      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      {{ 'USERS_PAGE.NEW_USER' | translate }}
+    </button>
+  </div>
+
+  <!-- ── Success ───────────────────────────────────────────── -->
+  <div class="success-banner" *ngIf="successMsg">
+    <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    {{ successMsg }}
+    <button (click)="successMsg=''">✕</button>
+  </div>
+
+  <!-- ── Error ──────────────────────────────────────────────── -->
+  <div class="error-banner" *ngIf="errorMsg">
+    <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+    {{ errorMsg }}
+    <button (click)="errorMsg=''">✕</button>
+  </div>
+
+  <!-- ── Filtres ────────────────────────────────────────────── -->
+  <div class="filters-bar">
+    <div class="search-box">
+      <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.5 6.5 0 1 0 14 15.5l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input type="text" [placeholder]="'USERS_PAGE.SEARCH_PLACEHOLDER' | translate"
+             [value]="searchQuery" (input)="onSearch($any($event.target).value)"/>
+      <button class="clear-btn" *ngIf="searchQuery" (click)="clearSearch()">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+    <div class="filter-group">
+      <select class="filter-select" [(ngModel)]="filterAdvisor" (change)="onFilterAdvisor()">
+        <option value="">{{ 'USERS_PAGE.ALL_ROLES' | translate }}</option>
+        <option value="1">{{ 'USERS_PAGE.COL_ADVISOR' | translate }}</option>
+        <option value="0">Standard</option>
+      </select>
+      <select class="filter-select" [(ngModel)]="filterBlocked" (change)="onFilterBlocked()">
+        <option [ngValue]="false">{{ 'USERS_PAGE.ALL_STATUS' | translate }}</option>
+        <option [ngValue]="true">{{ 'USERS_PAGE.BLOCKED_ONLY' | translate }}</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── Table ─────────────────────────────────────────────── -->
+  <div class="table-card">
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th class="sortable" (click)="sort('login')">
+              {{ 'USERS_PAGE.COL_LOGIN' | translate }} <span class="sort-icon" [class.active]="sortCol==='login'">{{ sortIcon('login') }}</span>
+            </th>
+            <th>{{ 'USERS_PAGE.COL_PHONE' | translate }}</th>
+            <th class="sortable" (click)="sort('loginPere')">
+              {{ 'USERS_PAGE.COL_PARENT' | translate }} <span class="sort-icon" [class.active]="sortCol==='loginPere'">{{ sortIcon('loginPere') }}</span>
+            </th>
+            <th>{{ 'USERS_PAGE.COL_ROLE' | translate }}</th>
+            <th>{{ 'USERS_PAGE.COL_ADVISOR' | translate }}</th>
+            <th>{{ 'USERS_PAGE.COL_PWD_EXP' | translate }}</th>
+            <th>{{ 'USERS_PAGE.COL_ATTEMPTS' | translate }}</th>
+            <th>{{ 'USERS_PAGE.COL_STATUS' | translate }}</th>
+            <th class="col-actions">{{ 'USERS_PAGE.COL_ACTIONS' | translate }}</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <tr *ngIf="loading">
+            <td colspan="8" class="loading-cell">
+              <div class="loader-dots"><span></span><span></span><span></span></div>
+            </td>
+          </tr>
+
+          <tr *ngIf="!loading && users.length === 0">
+            <td colspan="9" class="empty-cell">{{ 'USERS_PAGE.NO_USERS' | translate }}</td>
+          </tr>
+
+          <tr *ngFor="let u of users; trackBy: trackByLogin"
+              [class.row-blocked]="isBlocked(u)">
+
+            <td>
+              <div class="user-cell">
+                <div class="user-avatar">{{ u.login.charAt(0).toUpperCase() }}</div>
+                <div>
+                  <div class="user-login">{{ u.login }}</div>
+                  <div class="user-sub" *ngIf="u.loginPere">↳ {{ u.loginPere }}</div>
+                </div>
+              </div>
+            </td>
+
+            <td>{{ u.phone || '—' }}</td>
+            <td class="text-muted">{{ u.loginPere || '—' }}</td>
+
+            <td>
+              <span class="badge badge-role" *ngIf="u.roleName; else noRole">{{ u.roleName }}</span>
+              <ng-template #noRole><span class="text-muted">—</span></ng-template>
+            </td>
+
+            <td>
+              <span class="badge" [class.badge-blue]="u.isAdvisor===1" [class.badge-gray]="u.isAdvisor!==1">
+                {{ u.isAdvisor === 1 ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}
+              </span>
+            </td>
+
+            <td class="mono">{{ u.pwdExpDate ? (u.pwdExpDate | date:'dd/MM/yy') : '—' }}</td>
+
+            <td>
+              <span class="attempts-badge" [class.attempts-warn]="(u.failedAttempts ?? 0) >= 3">
+                {{ u.failedAttempts ?? 0 }}
+              </span>
+            </td>
+
+            <td>
+              <span class="badge" [class.badge-red]="isBlocked(u)" [class.badge-green]="!isBlocked(u)">
+                {{ isBlocked(u) ? ('COMMON.BLOCKED' | translate) : ('COMMON.ACTIVE' | translate) }}
+              </span>
+            </td>
+
+            <td>
+              <div class="actions-group">
+                <button class="action-btn devices-btn" (click)="openDevices(u)" title="Devices">
+                  <svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v1H5V4a2 2 0 0 1 2-2zm-3 5h16v2H4V7zm1 4h14v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9zm5 2v6h4v-6H10z"/></svg>
+                </button>
+                <button class="action-btn view-btn" (click)="openView(u)" [title]="'COMMON.VIEW' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+                </button>
+                <button class="action-btn edit-btn" (click)="openEdit(u)" [title]="'COMMON.EDIT' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </button>
+                <button class="action-btn reset-btn" (click)="resetAttempts(u.login)"
+                        [disabled]="resetting===u.login" [title]="'COMMON.RESET' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                </button>
+                <button class="action-btn delete-btn" (click)="openDelete(u)" [title]="'COMMON.DELETE' | translate">
+                  <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" *ngIf="totalPages > 1">
+      <button class="page-btn" (click)="goPage(page-1)" [disabled]="page===0">
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+      </button>
+      <ng-container *ngFor="let p of pageNumbers">
+        <button class="page-btn" [class.active]="p===page" (click)="goPage(p)"
+                *ngIf="p===0||p===totalPages-1||(p>=page-2&&p<=page+2)">{{ p+1 }}</button>
+        <span class="page-btn" style="pointer-events:none"
+              *ngIf="(p===page-3||p===page+3)&&p!==0&&p!==totalPages-1">…</span>
+      </ng-container>
+      <button class="page-btn" (click)="goPage(page+1)" [disabled]="page>=totalPages-1">
+        <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </button>
+      <span class="page-info">{{ 'COMMON.PAGE' | translate }} {{ page+1 }} / {{ totalPages }}</span>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  MODAL VIEW                                             -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="modalMode==='view' && selectedUser" (click)="closeModal()">
+    <div class="modal modal-wide" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title">{{ 'USERS_PAGE.VIEW_TITLE' | translate }} — {{ selectedUser.login }}</h2>
+        <button class="modal-close" (click)="closeModal()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="section-title-divider">{{ 'USERS_PAGE.SECTION_IDENTITY' | translate }}</p>
+        <div class="info-grid">
+          <div class="info-item"><span class="info-label">{{ 'USERS_PAGE.COL_LOGIN' | translate }}</span><span class="info-value">{{ selectedUser.login }}</span></div>
+          <div class="info-item"><span class="info-label">{{ 'USERS_PAGE.COL_PHONE' | translate }}</span><span class="info-value">{{ selectedUser.phone || '—' }}</span></div>
+          <div class="info-item"><span class="info-label">{{ 'USERS_PAGE.COL_PARENT' | translate }}</span><span class="info-value">{{ selectedUser.loginPere || '—' }}</span></div>
+          <div class="info-item"><span class="info-label">{{ 'USERS_PAGE.COL_ROLE' | translate }}</span>
+            <span class="info-value">
+              <span class="badge badge-role" *ngIf="selectedUser.roleName; else noRoleView">{{ selectedUser.roleName }}</span>
+              <ng-template #noRoleView><span>—</span></ng-template>
+            </span>
+          </div>
+          <div class="info-item"><span class="info-label">{{ 'USERS_PAGE.COL_ADVISOR' | translate }}</span>
+            <span class="info-value">
+              <span class="badge" [class.badge-blue]="selectedUser.isAdvisor===1" [class.badge-gray]="selectedUser.isAdvisor!==1">
+                {{ selectedUser.isAdvisor===1 ? ('COMMON.YES' | translate) : ('COMMON.NO' | translate) }}
+              </span>
+            </span>
+          </div>
+        </div>
+
+        <p class="section-title-divider">{{ 'USERS_PAGE.SECTION_SECURITY' | translate }}</p>
+        <div class="info-grid">
+          <div class="info-item"><span class="info-label">{{ 'USERS_PAGE.COL_PWD_EXP' | translate }}</span><span class="info-value">{{ selectedUser.pwdExpDate ? (selectedUser.pwdExpDate | date:'dd/MM/yyyy') : '—' }}</span></div>
+          <div class="info-item"><span class="info-label">GMT+</span><span class="info-value">{{ selectedUser.gmtPlus ?? '—' }}</span></div>
+          <div class="info-item"><span class="info-label">{{ 'USERS_PAGE.COL_ATTEMPTS' | translate }}</span>
+            <span class="info-value" [class.text-red]="(selectedUser.failedAttempts ?? 0) >= 3">
+              {{ selectedUser.failedAttempts ?? 0 }}
+            </span>
+          </div>
+          <div class="info-item"><span class="info-label">{{ 'COMMON.BLOCKED' | translate }}</span>
+            <span class="info-value" [class.text-red]="isBlocked(selectedUser)">
+              {{ formatDate(selectedUser.blockedUntil) }}
+            </span>
+          </div>
+        </div>
+
+        <p class="section-title-divider">{{ 'USERS_PAGE.SECTION_FACEBOOK' | translate }}</p>
+        <div class="info-grid">
+          <div class="info-item"><span class="info-label">Login FB</span><span class="info-value">{{ selectedUser.loginFb || '—' }}</span></div>
+          <div class="info-item"><span class="info-label">ID FB</span><span class="info-value mono">{{ selectedUser.idFb || '—' }}</span></div>
+          <div class="info-item"><span class="info-label">ID FB Msg</span><span class="info-value mono">{{ selectedUser.idFbMsg || '—' }}</span></div>
+        </div>
+
+        <p class="section-title-divider">Modules Chatbot ARIA</p>
+        <div class="info-item" *ngIf="isAdminChatbot">
+          <span class="badge badge-blue">Accès complet (admin)</span>
+        </div>
+        <div class="modules-view" *ngIf="!isAdminChatbot">
+          <span class="module-tag" *ngFor="let m of userModules">{{ m }}</span>
+          <span class="text-muted" *ngIf="userModules.length === 0">Aucun module assigné</span>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-ghost" (click)="closeModal()">{{ 'COMMON.CLOSE' | translate }}</button>
+          <button class="btn btn-primary" (click)="openEdit(selectedUser)">
+            <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+            {{ 'COMMON.EDIT' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  MODAL CREATE / EDIT                                    -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="modalMode==='create'||modalMode==='edit'" (click)="closeModal()">
+    <div class="modal modal-wide" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title">{{ (modalMode==='create' ? 'USERS_PAGE.CREATE_TITLE' : 'USERS_PAGE.EDIT_TITLE') | translate }}{{ modalMode==='edit' ? ' — '+selectedUser?.login : '' }}</h2>
+        <button class="modal-close" (click)="closeModal()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="error-banner" *ngIf="errorMsg">{{ errorMsg }}</div>
+
+        <form [formGroup]="form" (ngSubmit)="save()">
+          <p class="section-title-divider">{{ 'USERS_PAGE.SECTION_IDENTITY' | translate }}</p>
+          <div class="form-row">
+            <div class="form-group" [class.has-error]="isInvalid('login')">
+              <label>{{ 'USERS_PAGE.COL_LOGIN' | translate }} <span class="required">*</span></label>
+              <input type="text" formControlName="login" placeholder="ex: jdupont"/>
+              <span class="error-msg" *ngIf="isInvalid('login')">{{ 'USERS_PAGE.LOGIN_REQUIRED' | translate }}</span>
+            </div>
+            <div class="form-group">
+              <label>{{ modalMode==='edit' ? ('USERS_PAGE.PWD_HINT' | translate) : '' }}</label>
+              <div class="pwd-wrap">
+                <input [type]="showPwd ? 'text' : 'password'" formControlName="pwd" placeholder="••••••••"/>
+                <button type="button" class="toggle-pwd" (click)="showPwd=!showPwd">
+                  <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <p class="section-title-divider">{{ 'USERS_PAGE.SECTION_IDENTITY' | translate }}</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>{{ 'USERS_PAGE.COL_PHONE' | translate }}</label>
+              <input type="text" formControlName="phone" placeholder="+216 XX XXX XXX"/>
+            </div>
+            <div class="form-group">
+              <label>{{ 'USERS_PAGE.COL_PARENT' | translate }}</label>
+              <input type="text" formControlName="loginPere"/>
+            </div>
+            <div class="form-group">
+              <label>{{ 'USERS_PAGE.COL_ROLE' | translate }}</label>
+              <select formControlName="roleId">
+                <option [ngValue]="null">{{ 'USERS_PAGE.NO_ROLE' | translate }}</option>
+                <option *ngFor="let r of roles" [ngValue]="r.id">{{ r.userName }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>{{ 'USERS_PAGE.COL_PWD_EXP' | translate }}</label>
+              <input type="date" formControlName="pwdExpDate"/>
+            </div>
+            <div class="form-group">
+              <label>GMT+</label>
+              <input type="number" formControlName="gmtPlus" min="-12" max="14"/>
+            </div>
+            <div class="form-group">
+              <label>{{ 'USERS_PAGE.COL_ADVISOR' | translate }}</label>
+              <div class="toggle-group">
+                <button type="button" class="toggle-opt"
+                        [class.active]="form.get('isAdvisor')?.value==0"
+                        (click)="form.get('isAdvisor')?.setValue(0)">{{ 'COMMON.NO' | translate }}</button>
+                <button type="button" class="toggle-opt"
+                        [class.active]="form.get('isAdvisor')?.value==1"
+                        (click)="form.get('isAdvisor')?.setValue(1)">{{ 'COMMON.YES' | translate }}</button>
+              </div>
+            </div>
+          </div>
+
+          <p class="section-title-divider">{{ 'USERS_PAGE.SECTION_SECURITY' | translate }}</p>
+          <div class="form-row">
+            <div class="form-group">
+              <label>{{ 'USERS_PAGE.COL_ATTEMPTS' | translate }}</label>
+              <input type="number" formControlName="failedAttempts" min="0"/>
+            </div>
+            <div class="form-group">
+              <label>{{ 'COMMON.BLOCKED' | translate }}</label>
+              <input type="datetime-local" formControlName="blockedUntil"/>
+            </div>
+          </div>
+
+          <p class="section-title-divider">{{ 'USERS_PAGE.SECTION_FACEBOOK' | translate }}</p>
+          <div class="form-row">
+            <div class="form-group"><label>Login FB</label><input type="text" formControlName="loginFb"/></div>
+            <div class="form-group"><label>ID FB</label><input type="text" formControlName="idFb"/></div>
+            <div class="form-group"><label>ID FB Msg</label><input type="text" formControlName="idFbMsg"/></div>
+          </div>
+
+          <!-- ── Modules Chatbot ARIA ── -->
+          <p class="section-title-divider">Modules Chatbot ARIA</p>
+          <div class="chatbot-admin-row">
+            <label class="toggle-label">
+              <span>Accès complet (admin chatbot)</span>
+              <div class="toggle-switch" [class.on]="isAdminChatbot" (click)="isAdminChatbot=!isAdminChatbot">
+                <div class="toggle-knob"></div>
+              </div>
+            </label>
+          </div>
+          <div class="modules-loading" *ngIf="loadingModules">
+            <div class="loader-dots"><span></span><span></span><span></span></div>
+          </div>
+          <div class="modules-grid" *ngIf="!loadingModules && !isAdminChatbot">
+            <label class="module-chip" *ngFor="let m of availableModules"
+                   [class.active]="hasModule(m)" (click)="toggleModule(m)">
+              <svg viewBox="0 0 24 24" class="chip-icon" *ngIf="hasModule(m)">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+              <span>{{ m }}</span>
+            </label>
+          </div>
+          <p class="modules-admin-hint" *ngIf="!loadingModules && isAdminChatbot">
+            Accès à tous les modules sans restriction.
+          </p>
+
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" (click)="closeModal()">{{ 'COMMON.CANCEL' | translate }}</button>
+            <button type="submit" class="btn btn-primary" [disabled]="saving||form.invalid">
+              <span class="btn-spinner" *ngIf="saving"></span>
+              {{ (modalMode==='create' ? 'COMMON.CREATE' : 'COMMON.SAVE') | translate }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  MODAL DELETE                                           -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="modal-backdrop" *ngIf="modalMode==='delete' && selectedUser" (click)="closeModal()">
+    <div class="modal modal-sm" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2 class="modal-title danger">{{ 'USERS_PAGE.DELETE_TITLE' | translate }}</h2>
+        <button class="modal-close" (click)="closeModal()">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="delete-icon">
+          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+        </div>
+        <p class="confirm-title">{{ 'USERS_PAGE.DELETE_CONFIRM' | translate }}</p>
+        <div class="confirm-info">
+          <div class="confirm-row"><span>{{ 'USERS_PAGE.COL_LOGIN' | translate }}</span><strong>{{ selectedUser.login }}</strong></div>
+          <div class="confirm-row"><span>{{ 'USERS_PAGE.COL_PHONE' | translate }}</span><strong>{{ selectedUser.phone || '—' }}</strong></div>
+          <div class="confirm-row"><span>{{ 'USERS_PAGE.COL_STATUS' | translate }}</span>
+            <strong [class.text-red]="isBlocked(selectedUser)">{{ isBlocked(selectedUser) ? ('COMMON.BLOCKED' | translate) : ('COMMON.ACTIVE' | translate) }}</strong>
+          </div>
+        </div>
+        <p class="confirm-warn">{{ 'COMMON.IRREVERSIBLE' | translate }}</p>
+        <div class="modal-footer">
+          <button class="btn btn-ghost" (click)="closeModal()">{{ 'COMMON.CANCEL' | translate }}</button>
+          <button class="btn btn-danger" (click)="confirmDelete()" [disabled]="saving">
+            <span class="btn-spinner" *ngIf="saving"></span>
+            {{ 'COMMON.DELETE' | translate }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!--  PANEL DEVICES                                          -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="modal-backdrop" *ngIf="devicesUser" (click)="closeDevices()">
+  <div class="modal modal-devices" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="devices-header-left">
+        <svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v1H5V4a2 2 0 0 1 2-2zm-3 5h16v2H4V7zm1 4h14v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9zm5 2v6h4v-6H10z"/></svg>
+        <span>Devices — {{ devicesUser.login }}</span>
+      </div>
+      <button class="modal-close" (click)="closeDevices()">
+        <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+      </button>
+    </div>
+
+    <div class="modal-body">
+      <!-- Loading -->
+      <div class="loading-cell" *ngIf="loadingDevices">
+        <div class="loader-dots"><span></span><span></span><span></span></div>
+      </div>
+
+      <!-- Empty -->
+      <div class="devices-empty" *ngIf="!loadingDevices && userDevices.length === 0">
+        <svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v1H5V4a2 2 0 0 1 2-2zm-3 5h16v2H4V7zm1 4h14v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-9zm5 2v6h4v-6H10z"/></svg>
+        <p>Aucun device assigné à ce compte</p>
+      </div>
+
+      <!-- Groups -->
+      <ng-container *ngIf="!loadingDevices && userDevices.length > 0">
+        <div class="devices-summary-bar">
+          <span class="devices-total">{{ userDevices.length }} device{{ userDevices.length > 1 ? 's' : '' }} au total</span>
+          <div class="devices-type-chips">
+            <span class="type-chip" *ngFor="let g of groupedDevices" [style.border-color]="g.color" [style.color]="g.color">
+              {{ g.icon }} {{ g.devices.length }} {{ g.label }}
+            </span>
+          </div>
+        </div>
+
+        <div class="device-group" *ngFor="let g of groupedDevices">
+          <div class="device-group-header" [style.border-left-color]="g.color">
+            <span class="group-icon">{{ g.icon }}</span>
+            <span class="group-label" [style.color]="g.color">{{ g.label }}</span>
+            <span class="group-count">{{ g.devices.length }}</span>
+          </div>
+          <div class="device-cards">
+            <div class="device-card" *ngFor="let d of g.devices">
+              <div class="device-card-top">
+                <span class="device-id">#{{ d.id }}/{{ d.adresse }}</span>
+                <span class="device-meter-badge" *ngIf="d.is_general_meter === 1">Général</span>
+              </div>
+              <div class="device-name">{{ d.nom || 'Sans nom' }}</div>
+              <div class="device-desc" *ngIf="d.description">{{ d.description }}</div>
+              <div class="device-meta">
+                <span *ngIf="d.id_espace">Espace #{{ d.id_espace }}</span>
+                <span *ngIf="d.last_saved_index != null">Index: {{ d.last_saved_index }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ng-container>
+
+      <div class="modal-footer">
+        <button class="btn btn-ghost" (click)="closeDevices()">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<app-chatbot></app-chatbot>
+
+</div>

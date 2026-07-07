@@ -1,0 +1,100 @@
+
+# ── Données ──────────────────────────────────────────────────────────────────
+donnees:
+
+  # CSV du nouveau device gaz (peut être vide au démarrage cold start)
+  fichier_nouveau_device: ""
+
+  # CSV des devices gaz existants = source des profils statistiques de population
+  fichier_population: "gaz.csv"   # chemin vers le CSV population — à configurer
+
+  # Dossier de sortie
+  dossier_resultats: "outputs/coldstart_gaz"
+
+  #date_debut: "2025-09-01"
+  #date_fin:   "2026-01-31"
+
+
+# ── Nouveau device ────────────────────────────────────────────────────────────
+nouveau_device:
+  id: "NEW_GAZ_001"
+
+
+# ── Colonnes ─────────────────────────────────────────────────────────────────
+colonnes:
+  timestamp: "date"
+  valeur:
+    - conso
+    - avg_debit_per_min
+  item_id:  "item_id"
+  device:   "id_device"
+
+
+# ── Algorithmes de détection cold start ─────────────────────────────────────
+algorithmes:
+  # Mode : "zscore" | "iqr" | "isolation_forest" | "chronos" | "ensemble"
+  mode: "ensemble"
+  min_votes_anomalie: 2
+
+  zscore:
+    # Gaz : distribution quasi-normale, légèrement asymétrique
+    # 2.5 sigma = équilibre faux positifs / détection
+    seuil: 2.5
+
+  iqr:
+    # Gaz : IQR plus strict que eau car moins de zéros (débit quasi-continu)
+    multiplicateur: 1.8
+
+  isolation_forest:
+    contamination: 0.04
+    n_estimateurs: 100
+    max_samples: 256
+
+
+# ── Chronos zero-shot (FPT) ───────────────────────────────────────────────────
+chronos:
+  modele: "autogluon/chronos-t5-tiny"
+  accelerateur: "cuda"
+  contexte: 72
+  horizon: 12
+  num_samples: 20
+  q_bas:  0.1
+  q_haut: 0.9
+  k_sigma: 1.2   # gaz : plus strict — fuite = urgence, mieux vaut détecter tôt
+  actif: true
+
+
+# ── Profil de population ──────────────────────────────────────────────────────
+profil:
+  min_devices: 1
+  min_lignes_device: 48
+  max_pct_offline: 0.80       # gaz : moins tolérant aux offline que eau
+  facteur_rollover: 30.0
+
+
+# ── Données synthétiques ──────────────────────────────────────────────────────
+synthese:
+  jours: 30
+  graine: 42
+
+  # Gaz : consommation plus régulière que eau — moins de bruit
+  facteur_bruit: 0.7
+
+  # Gaz : anomalies = fuite, sur-conso chauffage, arrêt brutal
+  taux_anomalies_synthetiques: 0.015
+
+  # Gaz : très peu d'offline (compteur rarement coupé)
+  taux_offline_synthetique: 0.03
+
+
+# ── Warmup progressif ─────────────────────────────────────────────────────────
+warmup:
+  heures: 336
+
+
+# ── Paramètres avancés ────────────────────────────────────────────────────────
+avance:
+  frequence: "1h"
+  limite_completion: 3
+  # Gaz : fuite prolongée = urgence absolue → régime dès 24h
+  seuil_regime_heures: 24
