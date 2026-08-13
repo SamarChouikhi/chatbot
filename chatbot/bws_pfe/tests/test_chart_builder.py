@@ -18,6 +18,7 @@ from mcp_client.chart_builder import (
     _chart_thl,
     _chart_realtime,
     _chart_anomaly,
+    _chart_trend,
 )
 
 
@@ -204,6 +205,16 @@ class TestBuildCharts:
         payload = json.dumps({'status': 'error', 'message': 'db fail'})
         result = build_charts('wm_analysis', payload)
         assert result == []
+
+    def test_trend_tool_dispatched(self):
+        payload = _ok({
+            'label': 'Eau', 'period': '24h', 'granularity': 'hour', 'unit': 'm³',
+            'series': [{'device': 'WM01', 'zone': 'Z1',
+                        'points': [{'t': '06h', 'v': 1.0}, {'t': '07h', 'v': 2.0}]}],
+        })
+        result = build_charts('wm_trend', payload)
+        assert isinstance(result, list)
+        assert result[0]['type'] == 'line'
 
     def test_energy_tool_dispatched(self):
         payload = _ok({'period': '24h', 'analysis': [
@@ -452,6 +463,59 @@ class TestChartRealtime:
         data = {'capteurs': [{'capteur_nom': 'C1', 'battery_level': 30}]}  # 30% direct
         chart = _chart_realtime(data)[0]
         assert chart['datasets'][0]['colors'][0] == '#f59e0b'
+
+
+# ── _chart_trend() ────────────────────────────────────────────────────────────
+
+class TestChartTrend:
+    def test_produces_line_chart(self):
+        data = {'label': 'Eau', 'period': '24h', 'granularity': 'hour', 'unit': 'm³',
+                'series': [{'device': 'WM01', 'points': [{'t': '06h', 'v': 1.0}]}]}
+        charts = _chart_trend(data)
+        assert len(charts) == 1
+        assert charts[0]['type'] == 'line'
+
+    def test_empty_series_returns_empty(self):
+        assert _chart_trend({'series': []}) == []
+
+    def test_labels_follow_bucket_order(self):
+        data = {'label': 'Eau', 'period': '24h', 'granularity': 'hour', 'unit': 'm³',
+                'series': [{'device': 'WM01', 'points': [
+                    {'t': '06h', 'v': 1.0}, {'t': '07h', 'v': 2.0}, {'t': '08h', 'v': 3.0},
+                ]}]}
+        assert _chart_trend(data)[0]['labels'] == ['06h', '07h', '08h']
+
+    def test_one_dataset_per_series(self):
+        data = {'label': 'Énergie', 'period': '7j', 'granularity': 'day', 'unit': 'kWh',
+                'series': [
+                    {'device': 'EN01', 'points': [{'t': '01/01', 'v': 5.0}]},
+                    {'device': 'EN02', 'points': [{'t': '01/01', 'v': 8.0}]},
+                ]}
+        datasets = _chart_trend(data)[0]['datasets']
+        assert {d['label'] for d in datasets} == {'EN01', 'EN02'}
+
+    def test_missing_bucket_filled_with_zero(self):
+        data = {'label': 'Eau', 'period': '24h', 'granularity': 'hour', 'unit': 'm³',
+                'series': [
+                    {'device': 'WM01', 'points': [{'t': '06h', 'v': 1.0}, {'t': '07h', 'v': 2.0}]},
+                    {'device': 'WM02', 'points': [{'t': '06h', 'v': 5.0}]},
+                ]}
+        chart = _chart_trend(data)[0]
+        wm02 = next(d for d in chart['datasets'] if d['label'] == 'WM02')
+        assert wm02['data'] == [5.0, 0]
+
+    def test_unit_propagated(self):
+        data = {'label': 'Gaz', 'period': '30j', 'granularity': 'day', 'unit': 'm³',
+                'series': [{'device': 'GM01', 'points': [{'t': '01/01', 'v': 1.0}]}]}
+        assert _chart_trend(data)[0]['unit'] == 'm³'
+
+    def test_title_mentions_granularity(self):
+        hourly = {'label': 'Eau', 'period': '24h', 'granularity': 'hour', 'unit': 'm³',
+                  'series': [{'device': 'WM01', 'points': [{'t': '06h', 'v': 1.0}]}]}
+        daily = {'label': 'Eau', 'period': '7j', 'granularity': 'day', 'unit': 'm³',
+                 'series': [{'device': 'WM01', 'points': [{'t': '01/01', 'v': 1.0}]}]}
+        assert 'horaire' in _chart_trend(hourly)[0]['title']
+        assert 'journalière' in _chart_trend(daily)[0]['title']
 
 
 # ── _chart_anomaly() ──────────────────────────────────────────────────────────

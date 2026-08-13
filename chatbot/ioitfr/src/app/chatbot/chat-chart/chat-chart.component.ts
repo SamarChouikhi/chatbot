@@ -80,10 +80,16 @@ export class ChatChartComponent implements OnInit, AfterViewInit, OnChanges, OnD
     const textColor = dark ? 'rgba(255,255,255,0.5)'  : 'rgba(0,0,0,0.5)';
     const unit      = this.config.unit || '';
 
+    const isLine   = this.config.type === 'line';
+    const canvasH  = this.canvasRef.nativeElement.height || 180;
+
     const chartDatasets = this.config.datasets.map((ds, i) => {
       const perItemColors = (ds as any).colors as string[] | undefined;
       const baseColor     = ds.color || this._color(i);
       const alpha         = this.config.type === 'doughnut' ? 1 : 0.85;
+      const borderColor   = perItemColors
+        ? perItemColors
+        : baseColor.startsWith('rgba') ? baseColor : this._hexToRgba(baseColor, 1);
 
       return {
         label          : ds.label,
@@ -92,14 +98,19 @@ export class ChatChartComponent implements OnInit, AfterViewInit, OnChanges, OnD
           ? perItemColors
           : this.config.type === 'doughnut'
             ? this.config.labels.map((_, j) => this._color(j))
-            : baseColor.startsWith('rgba') ? baseColor : this._hexToRgba(baseColor, alpha),
-        borderColor    : perItemColors
-          ? perItemColors
-          : baseColor.startsWith('rgba') ? baseColor : this._hexToRgba(baseColor, 1),
-        borderWidth    : this.config.type === 'doughnut' ? 2 : 1.5,
+            : isLine
+              ? this._lineGradient(ctx, baseColor, canvasH)
+              : baseColor.startsWith('rgba') ? baseColor : this._hexToRgba(baseColor, alpha),
+        borderColor    : borderColor,
+        borderWidth    : this.config.type === 'doughnut' ? 2 : isLine ? 2.5 : 1.5,
         borderRadius   : this.config.type === 'bar' ? 4 : 0,
+        pointRadius    : isLine ? (this.config.labels.length > 30 ? 0 : 3) : undefined,
+        pointHoverRadius: isLine ? 5 : undefined,
+        pointBackgroundColor: isLine ? borderColor : undefined,
+        pointBorderColor: isLine ? (dark ? '#0b1220' : '#ffffff') : undefined,
+        pointBorderWidth: isLine ? 1.5 : undefined,
         tension        : 0.4,
-        fill           : false,
+        fill           : isLine ? 'origin' : false,
       };
     });
 
@@ -129,7 +140,7 @@ export class ChatChartComponent implements OnInit, AfterViewInit, OnChanges, OnD
         animation          : { duration: 400 },
         plugins: {
           legend: {
-            display : this.config.type === 'doughnut',
+            display : this.config.type === 'doughnut' || (isLine && chartDatasets.length > 1),
             position: 'bottom',
             labels  : { color: textColor, font: { size: 10 }, padding: 8, boxWidth: 10 },
           },
@@ -151,6 +162,19 @@ export class ChatChartComponent implements OnInit, AfterViewInit, OnChanges, OnD
         ...(scales ? { scales } : {}),
       },
     });
+  }
+
+  private _lineGradient(ctx: CanvasRenderingContext2D, color: string, height: number): CanvasGradient {
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, this._toRgba(color, 0.35));
+    gradient.addColorStop(1, this._toRgba(color, 0.02));
+    return gradient;
+  }
+
+  private _toRgba(color: string, alpha: number): string {
+    return color.startsWith('rgba')
+      ? color.replace(/,\s*[\d.]+\)$/, `, ${alpha})`)
+      : this._hexToRgba(color, alpha);
   }
 
   private _hexToRgba(hex: string, alpha: number): string {

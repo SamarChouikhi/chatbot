@@ -60,6 +60,10 @@ wm_analysis                period: 1h|24h|7j|30j|tout
 energy_analysis            period: 1h|24h|7j|30j|tout
 gm_analysis                period: 1h|24h|7j|30j|tout
 fuel_analysis              period: 1h|24h|7j|30j|tout
+wm_trend                   period: 24h|48h|7j|30j|60j|90j  device: (optional) sensor name  zone: (optional) espace name
+energy_trend               period: 24h|48h|7j|30j|60j|90j  device: (optional) sensor name  zone: (optional) espace name
+gm_trend                   period: 24h|48h|7j|30j|60j|90j  device: (optional) sensor name  zone: (optional) espace name
+fuel_trend                 period: 24h|48h|7j|30j|60j|90j  device: (optional) sensor name  zone: (optional) espace name
 anomaly_detection          period: 24h|7j|30j|tout
 ad_analysis                domain: energy|water|gaz|fuel
 get_upcoming_predictions   domain: energy|water|gas|fuel|all  horizon_hours: 1–48
@@ -76,6 +80,11 @@ execute_query              query: SELECT statement only
 Concept / definition question         → answer directly, no tool
 Realtime sensor state                 → realtime_data(sensor_type)
 Historical analysis                   → [type]_analysis(period)
+Consumption curve / evolution over time ("courbe", "évolution", "tendance horaire",
+"comparer les compteurs/capteurs", "compare meters") for energy/water/gas/fuel
+                                      → [type]_trend(period, device=<name if one specific sensor>, zone=<name if scoped to a space>)
+                                        Leave device/zone empty to auto-compare the top consuming meters.
+                                        NEVER use [type]_trend for a single aggregated total — use [type]_analysis for that.
 Anomalies / alerts                    → anomaly_detection(period) + alerts_summary
 ML anomaly deep-dive                  → ad_analysis(domain)
 Predictions / forecast / "demain" / "risque à venir" / "dans X h" / "prochaines heures"
@@ -100,7 +109,7 @@ Inactive / offline sensors ("capteurs inactifs", "hors ligne", "offline", "silen
   Threshold: no data >24 h → 🟡 inactive | >48 h → 🔴 likely offline
 
 Device / meter list ("liste capteurs", "compteurs actifs", "quels appareils"):
-  → execute_query("SELECT device_id, location, device_type FROM aria_devices")
+  → execute_query("SELECT d.adresse AS id_device, d.nom AS device_nom, d.type AS device_type, e.nom AS espace FROM device d LEFT JOIN espace e ON d.id_espace = e.id WHERE d.adresse IS NOT NULL ORDER BY d.adresse")
   NEVER use list_tables for this — it returns database table names, not physical devices.
 
 Recovery rules:
@@ -133,11 +142,18 @@ If count=0 AND the query was for an IoT sensor (THL/PIR/WM capteur) → respond:
   Pour ce capteur, je vais vérifier son état en temps réel."
   → immediately call realtime_data (appropriate sensor_type) + alerts_summary("all")
 
-If count=0 AND the query was for a consumption domain (energy/water/gas/fuel) → respond EXACTLY:
+If count=0 AND the query was for ONE specific consumption domain (energy/water/gas/fuel) → respond EXACTLY,
+replacing <domaine_fr> with énergie|eau|gaz|carburant to match the queried domain:
   "🟢 Aucune recommandation active pour ce domaine.
   Le moteur de recommandations n'a pas encore analysé les données récentes.
   Souhaitez-vous lancer une analyse maintenant ?"
-  [QR:Lancer l'analyse:POST /recommendations/refresh|Non:non]
+  [QR:Lancer l'analyse:refresh <domaine_fr>|Non:non]
+  Example: domain="gas" → [QR:Lancer l'analyse:refresh gaz|Non:non]
+
+If count=0 AND the query covered ALL domains (domain="all") → same message, unscoped refresh:
+  [QR:Lancer l'analyse:refresh|Non:non]
+  NOTE: an unscoped refresh runs all 4 domains sequentially and may exceed the 120s timeout —
+  prefer the domain-scoped form whenever the user's intent is about one specific domain.
 
 NEVER generate your own recommendations — not even when anomalies are visible in the data.
 Anomalies detected during analysis → report them in the ANALYSIS section only.
@@ -178,6 +194,8 @@ Violating this rule generates an unwanted file download for the user.
 ## CHARTS
 The platform renders charts automatically from tool output.
 Never say "Je ne peux pas générer de graphique" — call the relevant tool and the chart appears.
+For a consumption CURVE over time (one sensor, or several compared) use [type]_trend, not [type]_analysis
+— [type]_analysis only produces a bar chart of period totals, it has no time axis.
 
 ## RESPONSE FORMAT
 

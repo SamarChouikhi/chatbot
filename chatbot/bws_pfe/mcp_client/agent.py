@@ -30,6 +30,10 @@ _TOOL_LABELS: dict[str, dict[str, str]] = {
     'energy_analysis'         : {'fr': '⚡ Analyse de la consommation électrique…',      'en': '⚡ Analyzing electricity consumption…',         'ar': '⚡ تحليل استهلاك الكهرباء…'},
     'gm_analysis'             : {'fr': '🔥 Analyse de la consommation gaz…',            'en': '🔥 Analyzing gas consumption…',                'ar': '🔥 تحليل استهلاك الغاز…'},
     'fuel_analysis'           : {'fr': '⛽ Analyse de la consommation carburant…',       'en': '⛽ Analyzing fuel consumption…',                'ar': '⛽ تحليل استهلاك الوقود…'},
+    'wm_trend'                : {'fr': '💧 Génération de la courbe eau…',               'en': '💧 Building water trend chart…',                'ar': '💧 إنشاء منحنى المياه…'},
+    'energy_trend'            : {'fr': '⚡ Génération de la courbe électrique…',        'en': '⚡ Building electricity trend chart…',           'ar': '⚡ إنشاء منحنى الكهرباء…'},
+    'gm_trend'                : {'fr': '🔥 Génération de la courbe gaz…',               'en': '🔥 Building gas trend chart…',                  'ar': '🔥 إنشاء منحنى الغاز…'},
+    'fuel_trend'              : {'fr': '⛽ Génération de la courbe carburant…',          'en': '⛽ Building fuel trend chart…',                  'ar': '⛽ إنشاء منحنى الوقود…'},
     'thl_analysis'            : {'fr': '🌡️ Lecture des capteurs THL…',                  'en': '🌡️ Reading THL sensors…',                      'ar': '🌡️ قراءة مستشعرات THL…'},
     'alerts_summary'          : {'fr': '🚨 Vérification des alertes actives…',          'en': '🚨 Checking active alerts…',                    'ar': '🚨 التحقق من التنبيهات النشطة…'},
     'realtime_data'           : {'fr': '📡 Récupération données temps réel…',           'en': '📡 Fetching real-time data…',                   'ar': '📡 جلب البيانات في الوقت الفعلي…'},
@@ -85,6 +89,10 @@ _TOOL_MODULE_MAP: dict[str, str | None] = {
     'energy_analysis'  : 'énergie électrique',
     'gm_analysis'      : 'gaz',
     'fuel_analysis'    : 'carburant',
+    'wm_trend'         : 'eau',
+    'energy_trend'     : 'énergie électrique',
+    'gm_trend'         : 'gaz',
+    'fuel_trend'       : 'carburant',
     'thl_analysis'     : 'équipements/capteurs',
     'alerts_summary'   : 'alertes',
     'realtime_data'    : None,
@@ -122,7 +130,7 @@ TIMEOUT_BY_BACKEND: dict[str, float] = {
     'ollama'     : 180.0,
     'groq'       : 120.0,  # relevé 75→120 : la génération est rapide mais les appels outils DB peuvent prendre 30-60s
     'gemini'     : 120.0,
-    'openrouter' : 150.0,
+    'openrouter' : 300.0,
     'huggingface': 120.0,
     'cerebras'   : 120.0,
 }
@@ -140,7 +148,7 @@ DEFAULT_MAX_CHARS = 800
 
 # Opt 2 — Nombre de messages chargés depuis MySQL selon le backend.
 _HISTORY_LIMIT_BY_BACKEND: dict[str, int] = {
-    'groq'       : 8,
+    'groq'       : 4,  # réduit pour éviter 413 sur llama-3.1-8b-instant (TPM limit 6000)
     'huggingface': 8,
     'openrouter' : 12,
     'gemini'     : 12,
@@ -152,6 +160,14 @@ _DEFAULT_HISTORY_LIMIT = 10
 # Opt 3 — Limite le nombre d'étapes ReAct (1 outil = 2 étapes : AI + Tool).
 # 16 étapes = 7 appels d'outils max — nécessaire pour le FULL REPORT (9 outils).
 _REACT_RECURSION_LIMIT = 16
+
+# Charts affichés uniquement si l'utilisateur les demande explicitement
+# (comparaison, graphique, courbe, visualisation...) — pas systématiquement à chaque réponse.
+_CHART_RE = re.compile(
+    r'\bgraphiques?\b|\bgraphs?\b|\bcharts?\b|\bcourbes?\b|\bdiagrammes?\b'
+    r'|\bplot(s|te[rz]?)?\b|\bvisualis[eé]|compar[eaéiè]',
+    re.IGNORECASE,
+)
 
 
 class _ThinkStreamFilter:
@@ -627,22 +643,18 @@ class AriaAgent:
         """Tronque l'historique aux limites de la fenêtre contextuelle du backend actif."""
         max_chars = MAX_CHARS_BY_BACKEND.get(self.backend, DEFAULT_MAX_CHARS)
         if self.backend == 'groq' and self.model_name and '8b' in self.model_name:
-            max_chars = 300
+            max_chars = 150  # llama-3.1-8b-instant : limite TPM 6000 tokens
 
         lang_name = _LANG_NAMES.get(lang, 'French (français)')
         messages  = [('system', f'PLATFORM_LANG={lang_name}. Respond ONLY in {lang_name}. Do not switch language regardless of the question language.')]
-
         for m in history:
             role    = 'human' if m['role'] == 'user' else 'ai'
             content = m['content']
             if len(content) > max_chars:
                 content = content[:max_chars] + '...'
             messages.append((role, content))
-
-        # Opt 1 — hint de routing injecté comme contexte système avant la question
         if routing_hint:
             messages.append(('system', routing_hint))
-
         messages.append(('human', question))
         return messages
 
@@ -695,7 +707,7 @@ class AriaAgent:
             if needs_retry(report):
                 logger.info(
                     f'[QUALITY GATE] score={report.score:.2f} — retry '
-                    f'(badge={report.has_badge}, tools={report.tools_called_ok})'
+                    f'(is_clean={report.is_clean}, tools={report.tools_called_ok})'
                 )
                 retry_q      = build_retry_hint(question, report)
                 retry_input  = self._build_messages_input(history, retry_q, lang)
@@ -856,7 +868,6 @@ class AriaAgent:
         yield {'type': 'thinking', 'data': _ui('thinking', lang)}
 
         hist_limit = _HISTORY_LIMIT_BY_BACKEND.get(self.backend, _DEFAULT_HISTORY_LIMIT)
-
         await asyncio.to_thread(
             self._history.save_message, thread_id, 'user', question,
             content_normalized=question.strip().lower(), user_id=user_id,
@@ -881,15 +892,14 @@ class AriaAgent:
         level        = 'knowledge'
         tool_results : list[tuple[str, str]] = []
         _sf          = _ThinkStreamFilter()
-
         try:
             _timeout = _get_timeout(self.backend)
+            logger.debug(f'[STREAM] backend={self.backend} timeout={_timeout}s')
             async for event in _stream_with_timeout(
                 executor.astream_events({'messages': messages_input}, config=config, version='v2'),
                 _timeout,
             ):
                 etype = event['event']
-
                 if etype == 'on_tool_start':
                     tool_name = event.get('name', '')
                     label     = _tool_label(tool_name, lang)
@@ -911,11 +921,10 @@ class AriaAgent:
                         if visible:
                             full_answer += visible
                             yield {'type': 'chunk', 'data': visible}
-
             if not full_answer:
                 # Le LLM n'a produit aucun texte (ex: tool non disponible, modèle muet).
                 # Un retry direct avec un message d'explication simple.
-                logger.warning('[STREAM] Réponse vide — retry simple sans tools')
+                logger.warning('[STREAM] Réponse vide — retry texte sans outils')
                 try:
                     _retry_msgs = self._build_messages_input(
                         history, question, lang,
@@ -925,13 +934,18 @@ class AriaAgent:
                             'poliment pourquoi et propose des alternatives disponibles.'
                         ),
                     )
-                    _retry_exec = await self._get_executor(allowed_modules)
+                    # Nouvel executor sans outils pour forcer une réponse texte
+                    _retry_exec = self._cra(
+                        model=self.llm, tools=[],
+                        prompt=self._cached_prompt,
+                        checkpointer=MemorySaver(),
+                    )
                     _retry_cfg  = {'recursion_limit': 4,
                                    'configurable': {'thread_id': f'{exec_thread_id}_empty_retry'}}
                     _sf_retry = _ThinkStreamFilter()
                     async for ev in _stream_with_timeout(
                         _retry_exec.astream_events({'messages': _retry_msgs}, config=_retry_cfg, version='v2'),
-                        60.0,
+                        45.0,
                     ):
                         if ev['event'] == 'on_chat_model_stream':
                             ch = ev['data'].get('chunk')
@@ -953,8 +967,11 @@ class AriaAgent:
             from mcp_client.chart_builder import build_charts
             from mcp_client.csv_export    import save_csv
 
-            _tr = list(tool_results)
+            _tr          = list(tool_results)
+            _wants_chart = bool(_CHART_RE.search(question))
             def _build_charts():
+                if not _wants_chart:
+                    return []
                 charts = []
                 for t_name, t_raw in _tr:
                     charts.extend(build_charts(t_name, t_raw))
@@ -1125,16 +1142,20 @@ class AriaAgent:
                     yield {'type': 'error', 'data': _ui('service_unavailable', lang)}
                     return
 
-            executor_fb  = await self._get_executor(allowed_modules)
-            messages_fb  = self._build_messages_input(history, question, lang, routing_hint=hint)
-            full_answer  = ''
-            level        = 'knowledge'
+            executor_fb    = await self._get_executor(allowed_modules)
+            messages_fb    = self._build_messages_input(history, question, lang, routing_hint=hint)
+            full_answer    = ''
+            level          = 'knowledge'
             tool_results_fb: list[tuple[str, str]] = []
-            _timeout_fb = _get_timeout(self.backend)
-            _sf_fb      = _ThinkStreamFilter()
+            _timeout_fb    = _get_timeout(self.backend)
+            _sf_fb         = _ThinkStreamFilter()
+            # CRITICAL: nouveau thread_id pour le nouvel executor — évite conflit MemorySaver
+            config_fb      = {'recursion_limit': _REACT_RECURSION_LIMIT,
+                              'configurable': {'thread_id': f'{exec_thread_id}_fb_{int(time.time()*1000)}'}}
+            logger.info(f'[STREAM FALLBACK] backend={self.backend}/{self.model_name} timeout={_timeout_fb}s')
             try:
                 async for event in _stream_with_timeout(
-                    executor_fb.astream_events({'messages': messages_fb}, config=config, version='v2'),
+                    executor_fb.astream_events({'messages': messages_fb}, config=config_fb, version='v2'),
                     _timeout_fb,
                 ):
                     etype = event['event']
@@ -1165,8 +1186,11 @@ class AriaAgent:
                 from mcp_client.chart_builder import build_charts
                 from mcp_client.csv_export    import save_csv
 
-                _tr_fb = list(tool_results_fb)
+                _tr_fb       = list(tool_results_fb)
+                _wants_chart = bool(_CHART_RE.search(question))
                 def _build_charts_fb():
+                    if not _wants_chart:
+                        return []
                     charts = []
                     for t_n, t_r in _tr_fb:
                         charts.extend(build_charts(t_n, t_r))
@@ -1206,9 +1230,9 @@ class AriaAgent:
                 timeout2  = isinstance(e2, asyncio.TimeoutError) or any(
                     k in err2.lower() for k in ['timeout', 'timed out', 'readtimeout', 'apitimeouterror']
                 )
+                logger.warning(f'[STREAM FALLBACK ERROR] timeout={timeout2} backend={self.backend}/{self.model_name} err={err2[:120]}')
 
                 if not (timeout2 and self.backend == 'ollama'):
-                    logger.exception(f'[STREAM FALLBACK RETRY ERROR] backend={self.backend}/{self.model_name}')
                     err_msg = (_ui('analysis_too_long', lang)
                                if timeout2 else _ui('service_unavailable', lang))
                     yield {'type': 'error', 'data': err_msg}
@@ -1240,9 +1264,11 @@ class AriaAgent:
                 executor_lr  = await self._get_executor(allowed_modules)
                 messages_lr  = self._build_messages_input(history, question, lang)
                 full_lr      = ''
+                config_lr    = {'recursion_limit': _REACT_RECURSION_LIMIT,
+                                'configurable': {'thread_id': f'{exec_thread_id}_lr_{int(time.time()*1000)}'}}
                 try:
                     async for event in executor_lr.astream_events(
-                        {'messages': messages_lr}, config=config, version='v2'
+                        {'messages': messages_lr}, config=config_lr, version='v2'
                     ):
                         if event['event'] == 'on_chat_model_stream':
                             chunk = event['data'].get('chunk')

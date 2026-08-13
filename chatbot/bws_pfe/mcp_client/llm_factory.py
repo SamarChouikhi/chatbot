@@ -324,7 +324,7 @@ class LLMFactory:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             llm = ChatGoogleGenerativeAI(
-                model=model, google_api_key=key, temperature=0, timeout=50, max_retries=0,
+                model=model, google_api_key=key, temperature=0, timeout=15, max_retries=0,
             )
             logger.info(f'LLM: Gemini / {model}')
             return (llm, model, 'gemini')

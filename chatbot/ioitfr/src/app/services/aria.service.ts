@@ -227,22 +227,24 @@ export class AriaService {
     return this.http.get(`${this.PYTHON}/health`).pipe(timeout(5000));
   }
 
-  // ── Vision — analyse d'image via Gemini ──────
+  // ── Vision — analyse d'image via OpenRouter (compte dédié, modèle :free) ──────
   analyzeImage(imageFile: File, question = ''): Observable<VisionResponse> {
     const form = new FormData();
     form.append('file', imageFile, imageFile.name);
     if (question.trim()) form.append('question', question.trim());
 
     return this.http.post<VisionResponse>(`${this.PYTHON}/analyze-image`, form).pipe(
-      timeout(60000),
+      timeout(150000),
       catchError(err => {
         let msg = "Erreur d'analyse d'image.";
-        if (err.name === 'TimeoutError') msg = 'Analyse trop longue (>60s). Réessayez.';
+        if (err.name === 'TimeoutError') msg = 'Analyse trop longue (>150s). Réessayez.';
         if (err.status === 0)   msg = 'Serveur inaccessible.';
         if (err.status === 401) msg = 'Clé VISION_API_KEY invalide.';
         if (err.status === 413) msg = 'Image trop grande (max 20 Mo).';
         if (err.status === 415) msg = 'Format non supporté. Utilisez JPEG, PNG ou WEBP.';
-        if (err.status === 429) msg = 'Quota Gemini dépassé. Attendez quelques secondes.';
+        if (err.status === 429) msg = err.error?.detail || 'Quota gratuit épuisé. Réessayez plus tard.';
+        if (err.status === 502) msg = err.error?.detail || 'Modèle vision temporairement indisponible.';
+        if (err.status === 503) msg = err.error?.detail || 'Modèles vision gratuits tous congestionnés. Réessayez dans une minute.';
         if (err.status === 500) msg = err.error?.detail || 'Erreur serveur interne.';
         return throwError(() => ({ error: { detail: msg } }));
       })

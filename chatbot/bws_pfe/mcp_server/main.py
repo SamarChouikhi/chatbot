@@ -17,6 +17,7 @@ from mcp_server.tools.anomaly      import anomaly_detection
 from mcp_server.tools.predictions  import get_upcoming_predictions
 from mcp_server.tools.ad_analysis  import ad_analysis
 from mcp_server.tools.reco_tool    import get_recommendations
+from mcp_server.tools.trend        import wm_trend, energy_trend, gm_trend, fuel_trend
 
 print_config()
 
@@ -39,6 +40,10 @@ mcp.tool()(anomaly_detection)
 mcp.tool()(get_upcoming_predictions)
 mcp.tool()(ad_analysis)
 mcp.tool()(get_recommendations)
+mcp.tool()(wm_trend)
+mcp.tool()(energy_trend)
+mcp.tool()(gm_trend)
+mcp.tool()(fuel_trend)
 
 if __name__ == '__main__':
     print(f'\n  URL : http://localhost:{MCP_SERVER["port"]}/sse\n')

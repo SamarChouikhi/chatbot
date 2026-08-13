@@ -35,6 +35,10 @@ def build_charts(tool_name: str, raw_output: str) -> list[dict]:
             'thl_analysis'     : _chart_thl,
             'realtime_data'    : _chart_realtime,
             'anomaly_detection': _chart_anomaly,
+            'wm_trend'         : _chart_trend,
+            'energy_trend'     : _chart_trend,
+            'gm_trend'         : _chart_trend,
+            'fuel_trend'       : _chart_trend,
         }
         fn = builders.get(tool_name)
         if not fn:
@@ -55,6 +59,10 @@ def _bar(title: str, labels: list, datasets: list, unit: str = '') -> dict:
 
 def _doughnut(title: str, labels: list, datasets: list, unit: str = '') -> dict:
     return {'type': 'doughnut', 'title': title, 'labels': labels,
+            'datasets': datasets, 'unit': unit}
+
+def _line(title: str, labels: list, datasets: list, unit: str = '') -> dict:
+    return {'type': 'line', 'title': title, 'labels': labels,
             'datasets': datasets, 'unit': unit}
 
 def _ds(label: str, data: list, color: str) -> dict:
@@ -227,6 +235,37 @@ def _chart_realtime(data: dict) -> list[dict]:
         'unit'    : '%',
         'yMax'    : 100,
     }]
+
+
+def _chart_trend(data: dict) -> list[dict]:
+    series = data.get('series', [])
+    if not series:
+        return []
+
+    # Axe X : union ordonnée des buckets vus (au cas où un capteur aurait
+    # des trous), dans l'ordre d'apparition.
+    labels: list = []
+    seen = set()
+    for s in series:
+        for p in s.get('points', []):
+            t = p.get('t')
+            if t not in seen:
+                seen.add(t)
+                labels.append(t)
+    if not labels:
+        return []
+
+    colors = ['#0ea5e9', '#10b981', '#f59e0b', '#e74c3c', '#8b5cf6', '#06b6d4']
+    datasets = []
+    for i, s in enumerate(series):
+        by_label = {p['t']: p['v'] for p in s.get('points', [])}
+        datasets.append(_ds(s.get('device', '?'),
+                             [by_label.get(l, 0) for l in labels],
+                             colors[i % len(colors)]))
+
+    granularity = 'horaire' if data.get('granularity') == 'hour' else 'journalière'
+    title = f"Courbe {data.get('label', '')} — évolution {granularity} ({data.get('period', '')})"
+    return [_line(title, labels, datasets, data.get('unit', ''))]
 
 
 def _chart_anomaly(data: dict) -> list[dict]:

@@ -43,6 +43,7 @@ def get_or_create_thread(
 
     sid = session_id or f'{user_id}-{int(time.time())}'
     tid = f'thread-{sid}'
+    print(f"[DEBUG] Creating new session: {sid}, thread: {tid} for user: {user_id}", flush=True)
     _sessions[sid] = {
         'thread_id'    : tid,
         'user_id'      : user_id,

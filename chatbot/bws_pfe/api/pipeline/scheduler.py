@@ -99,10 +99,12 @@ def start(engine) -> None:
 
     # Backfill au démarrage + pipeline AD enchaîné si nécessaire (non bloquant)
     # _trigger_startup_backfill retourne True si elle a pris en charge l'AD (daily_stale or ad_stale)
-    # → dans ce cas, _trigger_ad_startup_check est un no-op (évite un double run)
+    # → dans ce cas, _trigger_ad_startup_check est un no-op (évite un double run) et les
+    # recommandations sont enchaînées dans le même thread (étape 3, après daily_*/ad_results frais).
     ad_scheduled = _trigger_startup_backfill(engine)
     if not ad_scheduled:
         _trigger_ad_startup_check(engine)
+        _trigger_recommendations_startup_check(engine)
 
 
 def stop() -> None:
@@ -150,9 +152,14 @@ def _trigger_startup_backfill(engine) -> None:
         if ad_stale:
             _run_ad_startup(engine)
 
+        # Étape 3 : régénère les recommandations si vide/périmé — enchaînée en dernier pour
+        # lire des daily_*/ad_results à jour (les recos dépendent des signaux détectés par l'AD).
+        if _needs_recommendations_backfill(engine):
+            _run_recommendations_startup(engine)
+
     t = threading.Thread(target=_run, name='startup-backfill', daemon=True)
     t.start()
-    return True  # AD sera géré dans ce thread
+    return True  # AD + recommandations seront gérés dans ce thread
 
 
 def _needs_ad_backfill(engine, threshold_days: int = 2) -> bool:
@@ -204,6 +211,65 @@ def _trigger_ad_startup_check(engine) -> None:
 
     logger.info("ad_results vide ou périmé — lancement du pipeline AD au démarrage…")
     t = threading.Thread(target=_run_ad_startup, args=(engine,), name='startup-ad-check', daemon=True)
+    t.start()
+
+
+def _needs_recommendations_backfill(engine) -> bool:
+    """True uniquement si aucune recommandation 'pending' non expirée n'existe en base.
+
+    Logique simple : si des recos valides sont déjà présentes → pas besoin de relancer
+    le cycle LLM, peu importe l'âge du dernier cycle ou le nombre de redémarrages.
+    """
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            fresh_count = conn.execute(text(
+                "SELECT COUNT(*) FROM aria_recommendations "
+                "WHERE status = 'pending' AND expires_at > NOW()"
+            )).scalar()
+        if (fresh_count or 0) > 0:
+            logger.info(
+                "Startup recommendations ignoré — %d reco(s) pending non expirée(s) présentes.",
+                fresh_count,
+            )
+            return False
+        return True
+    except Exception:
+        return True
+
+
+def _run_recommendations_startup(engine) -> None:
+    """Cycle complet recommandations (baselines + génération 4 domaines × 3 rôles + ROI).
+
+    À appeler depuis un thread — les appels LLM par signal détecté rendent ce cycle
+    potentiellement long (jusqu'à quelques minutes selon le nombre de signaux).
+    """
+    try:
+        from api.pipeline.recommendation_engine import run_recommendation_cycle
+        result = run_recommendation_cycle(engine)
+        logger.info("[RECO startup] Cycle terminé — %s", result.get('generated'))
+    except Exception as exc:
+        logger.error("[RECO startup] Erreur : %s", exc, exc_info=True)
+
+
+def _trigger_recommendations_startup_check(engine) -> None:
+    """Lance un cycle recommandations au démarrage si aria_recommendations est vide/périmé.
+
+    Cas d'usage : daily_*/ad_results étaient déjà frais (pas de backfill nécessaire) mais
+    le serveur n'a pas tourné au moment du job planifié 04h00 UTC. No-op si
+    _trigger_startup_backfill a déjà pris en charge la chaîne (voir son étape 3).
+    """
+    import threading
+
+    if not _needs_recommendations_backfill(engine):
+        logger.info("Startup recommendations ignoré — cycle récent et recos actives présentes.")
+        return
+
+    logger.info("aria_recommendations vide ou périmé — lancement du cycle au démarrage…")
+    t = threading.Thread(
+        target=_run_recommendations_startup, args=(engine,),
+        name='startup-recommendations', daemon=True,
+    )
     t.start()
 
 
@@ -345,16 +411,19 @@ def _sync_proactive_check(engine) -> None:
         from api.pipeline.proactive_broadcaster import get_broadcaster
         from api.session                        import list_active_sessions
 
-        # Cible : utilisateurs ayant eu une activité récente (session active)
-        active = list_active_sessions()
-        user_ids = list({s['user_id'] for s in active if s.get('user_id')})
+        broadcaster = get_broadcaster()
+
+        # Cible : utilisateurs ayant eu une activité récente (session de chat)
+        # + utilisateurs connectés au flux SSE proactif (app ouverte, sans avoir forcément chatté)
+        active   = list_active_sessions()
+        user_ids = list({s['user_id'] for s in active if s.get('user_id')}
+                        | set(broadcaster.active_user_ids()))
 
         if not user_ids:
             logger.debug('[PROACTIVE] Aucun utilisateur actif — skip')
             return
 
-        broadcaster = get_broadcaster()
-        alerts      = run_proactive_check(engine, user_ids)
+        alerts = run_proactive_check(engine, user_ids)
         persist_and_broadcast(engine, alerts, broadcaster)
 
     except Exception as exc:

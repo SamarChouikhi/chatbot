@@ -1498,6 +1498,94 @@ $chat-h:    min(700px, calc(100vh - 5rem));
   &.listening { svg { opacity: 1; stroke: $red !important; } animation: pulse-red 1.5s infinite; }
 }
 
+// ── Barre de signal vocal (enregistrement + transcription) ──────
+.voice-recording-bar,
+.voice-transcribing-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: $s3;
+  border: 1px solid $border-md;
+  border-radius: 14px;
+  padding: 8px 12px;
+  animation: fadeUp 160ms $ease;
+}
+
+.voice-rec-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: $red;
+  flex-shrink: 0;
+  animation: pulse-red 1.5s infinite;
+}
+
+.voice-waveform {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5px;
+  height: 28px;
+  overflow: hidden;
+}
+
+.voice-bar {
+  width: 3px;
+  min-height: 3px;
+  border-radius: 2px;
+  background: $red;
+  opacity: 0.85;
+  transition: height 90ms linear;
+}
+
+.voice-timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: $tx2;
+  flex-shrink: 0;
+  min-width: 34px;
+  text-align: center;
+}
+
+.voice-cancel-btn, .voice-confirm-btn {
+  width: 32px; height: 32px;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 140ms $spring;
+  background: transparent;
+
+  svg { width: 16px; height: 16px; }
+}
+
+.voice-cancel-btn svg { stroke: $tx2; }
+.voice-cancel-btn:hover svg { stroke: $red; }
+
+.voice-confirm-btn {
+  background: $green;
+  svg { stroke: #fff; }
+  &:hover { background: darken($green, 6%); }
+}
+
+.voice-transcribing-bar {
+  color: $tx2;
+  font-size: 0.8rem;
+  padding: 10px 14px;
+}
+
+.voice-spinner {
+  width: 16px; height: 16px;
+  border: 2px solid $tx4;
+  border-top-color: $tx1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
 .send-btn {
   width: 36px;
   height: 36px;
@@ -1772,6 +1860,15 @@ $chat-h:    min(700px, calc(100vh - 5rem));
     svg { stroke: #333; opacity: 0.45; }
     &:hover:not(:disabled) svg { opacity: 0.9; }
   }
+
+  .voice-recording-bar,
+  .voice-transcribing-bar {
+    background: #f5f5f5;
+    border-color: rgba(0,0,0,0.12);
+  }
+  .voice-timer, .voice-transcribing-bar { color: rgba(0,0,0,0.55); }
+  .voice-cancel-btn svg { stroke: rgba(0,0,0,0.55); }
+  .voice-spinner { border-color: rgba(0,0,0,0.15); border-top-color: #111; }
 
   .rename-input { color: #111; }
 

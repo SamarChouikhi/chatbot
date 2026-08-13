@@ -320,7 +320,7 @@ def get_employee_modules(user_id: str) -> list | None:
             text('SELECT allowed_modules, is_admin FROM aria_employees WHERE user_id = :uid'),
             {'uid': user_id}
         ).fetchone()
-
+    print(f"[DEBUG] Fetched employee row for user_id {user_id}: {row}", flush=True)
     if row is None:
         modules = None  # utilisateur inconnu → accès total
     elif row.is_admin:

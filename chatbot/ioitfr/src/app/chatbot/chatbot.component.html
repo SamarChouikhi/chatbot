@@ -742,7 +742,48 @@
         </button>
       </div>
 
-      <form class="input-form" (ngSubmit)="sendMessage()" #chatForm="ngForm" novalidate>
+      <!-- Barre de signal — enregistrement vocal en cours -->
+      <div class="voice-recording-bar" *ngIf="isListening" role="status" [attr.aria-label]="'CHATBOT.RECORDING_ARIA' | translate">
+        <button
+          type="button"
+          class="voice-cancel-btn"
+          (click)="cancelVoiceInput()"
+          [title]="'CHATBOT.CANCEL_DICTATION' | translate"
+          [attr.aria-label]="'CHATBOT.CANCEL_DICTATION_ARIA' | translate"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M18 6L6 18M6 6l12 12"/>
+          </svg>
+        </button>
+
+        <span class="voice-rec-dot" aria-hidden="true"></span>
+
+        <div class="voice-waveform" aria-hidden="true">
+          <span class="voice-bar" *ngFor="let level of audioLevels" [style.height.px]="level"></span>
+        </div>
+
+        <span class="voice-timer">{{ recordingTimeLabel }}</span>
+
+        <button
+          type="button"
+          class="voice-confirm-btn"
+          (click)="startVoiceInput()"
+          [title]="'CHATBOT.STOP_DICTATION' | translate"
+          [attr.aria-label]="'CHATBOT.STOP_DICTATION_ARIA' | translate"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Barre de statut — transcription en cours -->
+      <div class="voice-transcribing-bar" *ngIf="isTranscribing" role="status" [attr.aria-label]="'CHATBOT.TRANSCRIBING_ARIA' | translate">
+        <span class="voice-spinner" aria-hidden="true"></span>
+        <span>{{ 'CHATBOT.TRANSCRIBING' | translate }}</span>
+      </div>
+
+      <form class="input-form" *ngIf="!isListening && !isTranscribing" (ngSubmit)="sendMessage()" #chatForm="ngForm" novalidate>
 
         <textarea
           class="input-field"

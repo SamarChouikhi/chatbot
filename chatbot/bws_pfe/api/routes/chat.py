@@ -14,6 +14,14 @@ from api.db        import get_employee_modules
 router = APIRouter()
 log    = logging.getLogger('aria.api')
 
+_REFRESH_DOMAIN_ALIASES = {
+    'energy': 'energy', 'énergie': 'energy', 'energie': 'energy',
+    'électricité': 'energy', 'electricite': 'energy',
+    'water': 'water', 'eau': 'water',
+    'gas': 'gas', 'gaz': 'gas',
+    'fuel': 'fuel', 'carburant': 'fuel',
+}
+
 _agent = None
 
 
@@ -92,6 +100,7 @@ async def chat_stream(
                      Format : chaîne virgule-séparée ("eau,gaz,alertes").
     """
     ip     = request.client.host if (request and request.client) else 'unknown'
+    print(f"[DEBUG] chat_stream called from IP {ip} with question: {question}", flush=True)
     origin = (request.headers.get('origin') or '') if request else ''
     SSE_HEADERS = {
         'Cache-Control'              : 'no-cache',
@@ -132,8 +141,9 @@ async def chat_stream(
         import time as _t
         t0 = _t.perf_counter()
         q  = question.strip()
-
+        print(f"[DEBUG] Starting chat_stream for question '{q}' with thread_id '{tid}' and user_id '{uid}'", flush=True)
         static_resp = _agent.handle_static(q, tid, uid, t0)
+        print(f"[DEBUG] Static response check for question '{q}': {static_resp}", flush=True)
         if static_resp is not None:
             yield _sse({'type': 'chunk', 'data': static_resp})
             yield _sse({'type': 'done', 'level': 'static', 'backend': 'static',
@@ -141,8 +151,19 @@ async def chat_stream(
                         'duration': round(_t.perf_counter() - t0, 4), 'quick_replies': None})
             return
 
-        # Déclenchement manuel du moteur de recommandations via QR "refresh"
-        if q.lower() == 'refresh':
+        # Déclenchement manuel du moteur de recommandations via QR "refresh" (+ variante scopée "refresh <domaine>")
+        _q_norm         = q.strip().lower()
+        _refresh_domain = None
+        _is_refresh     = _q_norm == 'refresh'
+        print(f"[DEBUG] Checking for refresh command in question '{q}': is_refresh={_is_refresh}, refresh_domain={_refresh_domain}", flush=True)
+        if not _is_refresh and _q_norm.startswith('refresh '):
+            print(f"[DEBUG] Detected 'refresh' command with domain in question '{q}'", flush=True)
+            _alias = _q_norm[len('refresh '):].strip()
+            if _alias in _REFRESH_DOMAIN_ALIASES:
+                _is_refresh     = True
+                _refresh_domain = _REFRESH_DOMAIN_ALIASES[_alias]
+
+        if _is_refresh:
             yield _sse({'type': 'thinking', 'data': 'Analyse des données en cours…'})
             try:
                 from api.db import get_engine
@@ -153,11 +174,12 @@ async def chat_stream(
                 else:
                     result = await _aio.wait_for(
                         _aio.get_event_loop().run_in_executor(
-                            None, lambda: run_recommendation_cycle(_eng)
+                            None, lambda: run_recommendation_cycle(_eng, domain=_refresh_domain)
                         ),
                         timeout=120.0,
                     )
                     generated = result.get('generated', {})
+                    print(f"[DEBUG] Recommendations generated: {generated}", flush=True)
                     total = sum(v for v in generated.values() if isinstance(v, int) and v > 0)
                     lines = [f'✅ Analyse terminée — **{total} recommandation(s) générée(s)**.\n']
                     for dom, n in generated.items():
@@ -166,7 +188,13 @@ async def chat_stream(
                     lines.append('\nDemandez **"recommandations"** pour les consulter.')
                     yield _sse({'type': 'chunk', 'data': '\n'.join(lines)})
             except _aio.TimeoutError:
-                yield _sse({'type': 'chunk', 'data': '⏱️ Analyse expirée (>120s). Réessayez domaine par domaine.'})
+                if _refresh_domain:
+                    yield _sse({'type': 'chunk', 'data': '⏱️ Analyse expirée (>120s) pour ce domaine. Réessayez plus tard.'})
+                else:
+                    yield _sse({'type': 'chunk', 'data': (
+                        '⏱️ Analyse expirée (>120s). Réessayez domaine par domaine : '
+                        '**refresh énergie**, **refresh eau**, **refresh gaz** ou **refresh carburant**.'
+                    )})
             except Exception as _e:
                 log.error('[REFRESH] %s', _e, exc_info=True)
                 yield _sse({'type': 'chunk', 'data': f'🔴 Erreur lors de l\'analyse : {_e}'})
@@ -179,6 +207,7 @@ async def chat_stream(
                  (_t.perf_counter() - t0) * 1000, modules)
         try:
             first = True
+            print(f"Agent",_agent, flush=True)
             async for event in _agent.stream_process(q, tid, uid, modules, lang):
                 if first:
                     log.info('[STREAM TIMING] first_event=%.1fms type=%s',

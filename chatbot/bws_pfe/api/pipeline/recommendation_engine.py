@@ -178,11 +178,12 @@ DOMAIN_CONFIG: dict[str, dict] = {
 _BASELINES_TTL_SECONDS = 6 * 3600  # recalcul au plus une fois toutes les 6h
 
 
-def compute_baselines(engine, days: int = 90, force: bool = False) -> dict:
+def compute_baselines(engine, days: int = 90, force: bool = False, domain: str | None = None) -> dict:
     """Calcule P10/P50/P90 par (device_id, domain, hour_of_week) sur les derniers `days` jours.
 
     90 jours minimum pour avoir ≥12 observations par slot hour_of_week et des percentiles fiables.
     Skippé si les baselines ont été recalculées il y a moins de 6h, sauf si force=True.
+    `domain` restreint le calcul à un seul domaine (energy|water|gas|fuel) au lieu des 4.
     """
     if not force:
         try:
@@ -204,9 +205,11 @@ def compute_baselines(engine, days: int = 90, force: bool = False) -> dict:
         logger.error("pandas requis pour compute_baselines")
         return {}
 
+    domains = {domain: DOMAIN_CONFIG[domain]} if domain else DOMAIN_CONFIG
     results = {}
-    for domain, cfg in DOMAIN_CONFIG.items():
+    for domain, cfg in domains.items():
         try:
+            print(f"[DEBUG] Computing baselines for domain: {domain} with config: {cfg}", flush=True)
             df = _load_domain_data(engine, domain, cfg, days)
             if df.empty:
                 results[domain] = 0
@@ -694,12 +697,13 @@ def _get_device_context(engine, device_id: str, domain: str) -> dict:
     }
 
     try:
+        base_id = device_id.split('_')[0] if '_' in device_id else device_id
         with engine.connect() as conn:
             rows = conn.execute(text("""
-                SELECT message, severity, created_at FROM aria_alerts
-                WHERE device_id = :dev AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)
-                ORDER BY created_at DESC LIMIT 4
-            """), {'dev': device_id}).fetchall()
+                SELECT message, type, date FROM alerts
+                WHERE id_device = :dev AND date > DATE_SUB(NOW(), INTERVAL 7 DAY)
+                ORDER BY date DESC LIMIT 4
+            """), {'dev': base_id}).fetchall()
         ctx['recent_alerts'] = [
             {'msg': str(r[0])[:100], 'sev': str(r[1]), 'at': str(r[2])} for r in rows
         ]
@@ -1375,17 +1379,17 @@ def _rule_based_fallback(signal: dict, domain: str) -> dict | None:
 _ALL_ROLES = ('technicien', 'gestionnaire', 'directeur')
 
 
-def generate_all(engine) -> dict:
-    """Génère des recommandations pour tous les domaines et les 3 rôles."""
+def generate_all(engine, domain: str | None = None) -> dict:
+    """Génère des recommandations pour un domaine (ou les 4) et les 3 rôles."""
     results = {}
-    for domain in DOMAIN_CONFIG:
+    for d in ([domain] if domain else list(DOMAIN_CONFIG)):
         total = 0
         for role in _ALL_ROLES:
             try:
-                total += generate_domain(engine, domain, user_role=role)
+                total += generate_domain(engine, d, user_role=role)
             except Exception as exc:
-                logger.error("[reco:%s/%s] Erreur : %s", domain, role, exc, exc_info=True)
-        results[domain] = total
+                logger.error("[reco:%s/%s] Erreur : %s", d, role, exc, exc_info=True)
+        results[d] = total
     return results
 
 
@@ -1786,11 +1790,17 @@ def measure_roi(engine) -> int:
 
 # ── Entrypoint scheduler ──────────────────────────────────────────────────────
 
-def run_recommendation_cycle(engine) -> dict:
-    logger.info("[reco] Cycle IA démarré (contexte riche + CoT + feedback loop)…")
-    baselines = compute_baselines(engine)
-    generated = generate_all(engine)
+def run_recommendation_cycle(engine, domain: str | None = None) -> dict:
+    """Cycle complet (baselines + génération + ROI). `domain` restreint à energy|water|gas|fuel."""
+    logger.info("[reco] Cycle IA démarré (contexte riche + CoT + feedback loop)… domain=%s", domain or 'all')
+    print(f"[reco] Cycle IA démarré (contexte riche + CoT + feedback loop)… domain={domain or 'all'}")
+    baselines = compute_baselines(engine, domain=domain)
+    print(f"[reco] Baselines calculées : {baselines}")
+    generated = generate_all(engine, domain=domain)
+    print(f"[reco] Recommandations générées : {generated}")
     roi_count = measure_roi(engine)
+    print(f"[reco] ROI évalué pour {roi_count} recommandation(s).")
     result    = {'baselines': baselines, 'generated': generated, 'roi_evaluated': roi_count}
+    print(f"[reco] Cycle terminé : {result}")
     logger.info("[reco] Cycle terminé : %s", result)
     return result

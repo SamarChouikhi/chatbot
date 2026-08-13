@@ -143,8 +143,21 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
   // ── Voice / STT (MediaRecorder → AssemblyAI via backend) ──────────
   isVoiceSupported: boolean | null = null;
   isTranscribing = false;
+  audioLevels: number[] = Array(28).fill(3);
+  recordingSeconds = 0;
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
+  private audioCtx: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private meterRafId: number | null = null;
+  private recordingTimerId: ReturnType<typeof setInterval> | null = null;
+  private voiceCancelled = false;
+
+  get recordingTimeLabel(): string {
+    const m = Math.floor(this.recordingSeconds / 60).toString().padStart(2, '0');
+    const s = (this.recordingSeconds % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
 
   // ── TTS (SpeechSynthesis — natif navigateur) ──────────────────
   speakingMsgId: string | null = null;
@@ -294,6 +307,55 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.mediaRecorder = null;
     this.audioChunks   = [];
     this.isListening   = false;
+    this._stopAudioMeter();
+    this._stopRecordingTimer();
+  }
+
+  /** Anime la barre de signal (waveform) à partir du niveau audio réel du micro. */
+  private _startAudioMeter(stream: MediaStream): void {
+    try {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return;
+      this.audioCtx = new Ctx();
+      if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+      const source = this.audioCtx.createMediaStreamSource(stream);
+      this.analyser = this.audioCtx.createAnalyser();
+      this.analyser.fftSize = 64;
+      this.analyser.smoothingTimeConstant = 0.6;
+      source.connect(this.analyser);
+
+      const data = new Uint8Array(this.analyser.frequencyBinCount);
+      const barCount = this.audioLevels.length;
+      const step = Math.max(1, Math.floor(data.length / barCount));
+
+      const tick = () => {
+        if (!this.analyser) return;
+        this.analyser.getByteFrequencyData(data);
+        this.audioLevels = this.audioLevels.map((_, i) => {
+          const v = data[i * step] || 0;
+          return Math.max(3, Math.round((v / 255) * 28));
+        });
+        this.meterRafId = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch { /* dégradation silencieuse : la barre reste statique */ }
+  }
+
+  private _stopAudioMeter(): void {
+    if (this.meterRafId !== null) { cancelAnimationFrame(this.meterRafId); this.meterRafId = null; }
+    this.analyser = null;
+    if (this.audioCtx) { this.audioCtx.close().catch(() => {}); this.audioCtx = null; }
+    this.audioLevels = this.audioLevels.map(() => 3);
+  }
+
+  private _stopRecordingTimer(): void {
+    if (this.recordingTimerId !== null) { clearInterval(this.recordingTimerId); this.recordingTimerId = null; }
+  }
+
+  /** Annule l'enregistrement en cours sans lancer la transcription. */
+  cancelVoiceInput(): void {
+    this.voiceCancelled = true;
+    try { this.mediaRecorder?.stop(); } catch { /* silent */ }
   }
 
   speak(msg: ChatMessage): void {
@@ -330,12 +392,22 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
 
     navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-      this.audioChunks  = [];
-      this.isListening  = true;
+      this.audioChunks     = [];
+      this.isListening     = true;
+      this.voiceCancelled  = false;
+      this.recordingSeconds = 0;
+      this._stopRecordingTimer();
+      this.recordingTimerId = setInterval(() => { this.recordingSeconds++; }, 1000);
+      this._startAudioMeter(stream);
+
+      // Track cloné et dédié au recorder : évite toute interférence entre le
+      // tap Web Audio (barre de niveau) et MediaRecorder sur le même track
+      // (constaté sur certains pilotes/micros Bluetooth Windows → audio muet).
+      const recordStream = new MediaStream(stream.getAudioTracks().map(t => t.clone()));
 
       const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
         ? 'audio/webm;codecs=opus' : 'audio/webm';
-      this.mediaRecorder = new MediaRecorder(stream, { mimeType });
+      this.mediaRecorder = new MediaRecorder(recordStream, { mimeType });
 
       this.mediaRecorder.ondataavailable = (e: BlobEvent) => {
         if (e.data.size > 0) this.audioChunks.push(e.data);
@@ -343,13 +415,19 @@ export class ChatbotComponent implements OnInit, OnDestroy, AfterViewChecked {
 
       this.mediaRecorder.onstop = () => {
         stream.getTracks().forEach(t => t.stop());
-        this.isListening    = false;
-        this.isTranscribing = true;
+        recordStream.getTracks().forEach(t => t.stop());
+        this.isListening = false;
+        this._stopAudioMeter();
+        this._stopRecordingTimer();
 
+        const wasCancelled = this.voiceCancelled;
         const blob = new Blob(this.audioChunks, { type: mimeType });
         this.audioChunks   = [];
         this.mediaRecorder = null;
 
+        if (wasCancelled) return;
+
+        this.isTranscribing = true;
         const lang = navigator.language?.startsWith('ar') ? 'ar'
                    : navigator.language?.startsWith('en') ? 'en' : 'fr';
 
