@@ -11,6 +11,8 @@ from typing import Optional
 import pandas as pd
 from sqlalchemy import text
 
+from api.pipeline.data_quality import drop_counter_spikes
+
 logger = logging.getLogger('aria.pipeline.aggregator')
 
 
@@ -47,6 +49,8 @@ def aggregate_energy(engine, df: pd.DataFrame, run_date: Date) -> int:
 
     df = df.copy()
     df['date'] = pd.to_datetime(df['date'])
+    # Filtré sur toute la fenêtre extraite (et non sur la seule journée) pour une médiane robuste
+    df = drop_counter_spikes(df, 'cons_en', ['id_device', 'phase'])
     day_df = _day_filter(df, run_date)
     if day_df.empty:
         logger.warning("aggregate_energy: aucune donnée pour %s", run_date)

@@ -9,7 +9,8 @@ Pour chaque condition déclenchante, génère un message ARIA et le pousse
 dans le chat de l'utilisateur concerné via SSE (ProactiveBroadcaster).
 
 Règles :
-  - Cooldown 4h par (user_id, domain) — pas de spam
+  - Cooldown 24h par (user_id, domain) — 1 seule notification par jour max,
+    même si l'alerte a été rejetée (dismissed) entre-temps
   - Filtre sur allowed_modules de l'employé
   - Messages en français, template-based (pas d'appel LLM → fiable et rapide)
 """
@@ -26,7 +27,7 @@ logger = logging.getLogger('aria.proactive')
 # ── Seuils ────────────────────────────────────────────────────────────────────
 _ANOMALY_SCORE_MIN = 0.65   # score AD minimum pour déclencher une alerte
 _PRED_HORIZON_H    = 12     # fenêtre prédictions (heures dans le futur)
-_COOLDOWN_H        = 4      # intervalle min entre deux alertes pour (user, domain)
+_COOLDOWN_H        = 24     # intervalle min entre deux alertes pour (user, domain) — 1x/jour
 _CHECK_WINDOW_H    = 2      # fenêtre de recherche des nouvelles anomalies (= fréquence du job)
 
 # ── Templates ─────────────────────────────────────────────────────────────────
@@ -231,13 +232,20 @@ def _fetch_upcoming_predictions(engine) -> list[dict]:
 
 
 def _on_cooldown(engine, user_id: str, domain: str) -> bool:
-    """True si une alerte proactive a déjà été envoyée pour ce (user, domain) dans les 4h."""
+    """
+    True si une alerte proactive a déjà été envoyée pour ce (user, domain)
+    dans la fenêtre de cooldown (24h = 1 notification max par jour).
+
+    Note : on compte aussi les messages rejetés (dismissed=1) — un rejet ne
+    doit pas réinitialiser le cooldown, sinon l'utilisateur pourrait recevoir
+    une nouvelle alerte dès le prochain run du scheduler (toutes les 2h) et
+    se retrouver spammé malgré le rejet.
+    """
     with engine.connect() as conn:
         n = conn.execute(text("""
             SELECT COUNT(*) FROM aria_proactive_messages
             WHERE user_id  = :uid
               AND domain   = :dom
-              AND dismissed = 0
               AND created_at >= DATE_SUB(NOW(), INTERVAL :h HOUR)
         """), {'uid': user_id, 'dom': domain, 'h': _COOLDOWN_H}).scalar()
     return int(n or 0) > 0

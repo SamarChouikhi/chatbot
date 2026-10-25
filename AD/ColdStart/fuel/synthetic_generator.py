@@ -78,10 +78,20 @@ def generate_synthetic_series(
     hourly_scale = np.clip(hourly_mean / overall_mean, 0.01, 3.0)
     signal = raw_vals * hourly_scale[hour]
 
+    # Heures où la population n'est historiquement JAMAIS active (hourly_mean≈0,
+    # ex. 20h-6h pour un véhicule) : le plancher hourly_scale=0.01 laisserait un
+    # résidu raw_vals*0.01 (~0.6-2 km/h) qui n'existe dans aucune donnée réelle
+    # (distribution bimodale stricte : 0 ou plage active) → forcer à 0.
+    never_active_hour = hourly_mean[hour] <= 1e-9
+
     # Saisonnalité hebdomadaire
     weekly_mean = np.array(profile.weekly_mean)
     weekly_dev  = weekly_mean - float(np.mean(weekly_mean))
     signal      = np.maximum(signal + weekly_dev[dow] * 0.15, 0.0)
+
+    # Réappliquer le masque « jamais actif » après la saisonnalité hebdo, qui
+    # sinon réintroduit un résidu positif sur ces mêmes heures (weekly_dev > 0).
+    signal[never_active_hour] = 0.0
 
     # Appliquer offline
     signal[offline_mask] = 0.0

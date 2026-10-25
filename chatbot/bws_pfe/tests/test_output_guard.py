@@ -144,6 +144,13 @@ class TestCheckOutputLength:
 
 
 class TestCheckOutputCleanliness:
+    def test_copied_few_shot_identifier_detected(self):
+        intent = _intent(sensor_type='thl')
+        response = "🔴 2 batteries critiques : EXEMPLE-T3 à 8 % et EXEMPLE-T7 à 12 %, remplacement sous 24 h."
+        report = check_output(response, ['realtime_data'], intent)
+        assert report.is_clean is False
+        assert needs_retry(report) is True
+
     def test_placeholder_detected(self):
         intent = _intent(sensor_type='thl')
         response = "🟢 — La valeur est [value] et le capteur est [capteur] données."

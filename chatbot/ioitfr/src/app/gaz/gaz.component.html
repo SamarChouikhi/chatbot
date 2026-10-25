@@ -481,12 +481,12 @@
                 </td>
                 <td>
                   <div class="batt-bar">
-                    <div class="batt-fill" [style.width]="(rt.batteryLevel ?? 0) + '%'"
-                         [class.batt-ok]="(rt.batteryLevel ?? 0) > 40"
-                         [class.batt-warn]="(rt.batteryLevel ?? 0) <= 40 && (rt.batteryLevel ?? 0) > 15"
-                         [class.batt-low]="(rt.batteryLevel ?? 0) <= 15"></div>
+                    <div class="batt-fill" [style.width]="normBatt(rt.batteryLevel) + '%'"
+                         [class.batt-ok]="normBatt(rt.batteryLevel) > 40"
+                         [class.batt-warn]="normBatt(rt.batteryLevel) <= 40 && normBatt(rt.batteryLevel) > 15"
+                         [class.batt-low]="normBatt(rt.batteryLevel) <= 15"></div>
                   </div>
-                  <span class="batt-label">{{ rt.batteryLevel ?? '—' }}%</span>
+                  <span class="batt-label">{{ normBatt(rt.batteryLevel) }}%</span>
                 </td>
                 <td><span class="status-badge" [ngClass]="statusClass(rt.status)">{{ rt.status }}</span></td>
               </tr>

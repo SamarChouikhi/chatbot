@@ -1,26 +1,12 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, NgZone, ChangeDetectorRef } from '@angular/core';
-import { Router } from '@angular/router';
-import { Subject, forkJoin } from 'rxjs';
-import { ChatTriggerService } from '../core/services/chat-trigger.service';
-import { takeUntil, finalize } from 'rxjs/operators';
-import { TranslateService } from '@ngx-translate/core';
+import { Component, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Observable, forkJoin } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import {
   WaterService, WaterSummaryDto, WaterAlertDto, WaterChartDto, RtWmDto
 } from '../services/water.service';
-import {
-  Chart, ChartConfiguration,
-  LineController, BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend, Filler
-} from 'chart.js';
-
-Chart.register(
-  LineController, BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend, Filler
-);
+import { ChartConfiguration } from 'chart.js';
+import { CHART_BASE } from '../shared/chart-setup';
+import { DateRange, DomainDashboardBase, MODAL_CHART } from '../shared/domain-dashboard.base';
 
 interface KpiCard {
   label: string; value: string; unit: string;
@@ -31,7 +17,16 @@ interface KpiCard {
 
 interface ChartBar { label: string; conso: number; co2: number; debit: number; }
 
+interface WaterData {
+  summaries: WaterSummaryDto[];
+  alerts:    WaterAlertDto[];
+  rt:        RtWmDto[];
+}
+
+type ChartModalType = 'evolution' | 'co2cost' | 'consoByMeter';
+
 const PALETTE = {
+  ...CHART_BASE,
   water:    '#06b6d4', waterDim:    'rgba(6,182,212,0.15)',
   cyan:     '#0ea5e9', cyanDim:     'rgba(14,165,233,0.15)',
   green:    '#10b981', greenDim:    'rgba(16,185,129,0.15)',
@@ -39,8 +34,6 @@ const PALETTE = {
   blue:     '#0369a1', blueDim:     'rgba(3,105,161,0.15)',
   lime:     '#22c55e',
   red:      '#e74c3c', redDim:      'rgba(231,76,60,0.15)',
-  grid:     'rgba(255,255,255,0.06)',
-  text:     'rgba(255,255,255,0.45)'
 };
 
 @Component({
@@ -48,7 +41,7 @@ const PALETTE = {
   templateUrl: './water.component.html',
   styleUrls: ['./water.component.scss']
 })
-export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
+export class WaterComponent extends DomainDashboardBase<WaterSummaryDto, WaterAlertDto, WaterData> {
 
   @ViewChild('lineCanvas')        lineCanvas!:        ElementRef<HTMLCanvasElement>;
   @ViewChild('donutCanvas')       donutCanvas!:       ElementRef<HTMLCanvasElement>;
@@ -58,37 +51,15 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('wDailyCanvas')      wDailyCanvas!:      ElementRef<HTMLCanvasElement>;
   @ViewChild('modalChartCanvas')  modalChartCanvasRef!: ElementRef<HTMLCanvasElement>;
 
-  private lineChart!:        Chart<any>;
-  private donutChart!:       Chart<any>;
-  private barCo2Chart!:      Chart<any>;
-  private radarChart!:       Chart<any>;
-  private groupedBarChart!:  Chart<any>;
-  private wDailyChart:       any = null;
-  private modalChart:        any = null;
+  protected override readonly modalBackdropClass = 'water-chart-modal-backdrop';
+  protected override readonly insightLabel = 'Eau';
 
-  chartsReady = false;
-
-  chartModalOpen = false;
-  chartModalType: 'evolution' | 'co2cost' | 'consoByMeter' = 'evolution';
-
+  chartModalType: ChartModalType = 'evolution';
   chartModalTitle = '';
   chartModalBadge = 'Ligne';
 
-  private onEscKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') this.closeChartModal();
-  };
-
-  isLoading        = false;
-  loadError        = false;
-
-  selectedPeriod = 30;
-  periodOptions: Array<{ label: string; value: number }> = [];
-  dataRange = '';
-
-  summaries: WaterSummaryDto[] = [];
-  alerts:    WaterAlertDto[]   = [];
-  rtData:    RtWmDto[]         = [];
-  chart:     WaterChartDto | null = null;
+  rtData: RtWmDto[]            = [];
+  chart:  WaterChartDto | null = null;
 
   kpiCards:  KpiCard[]  = [];
   chartBars: ChartBar[] = [];
@@ -98,14 +69,12 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
   totalCost    = 0;
   alertCount   = 0;
 
-  private destroy$ = new Subject<void>();
+  constructor(private waterSvc: WaterService, private cdr: ChangeDetectorRef) { super(); }
 
-  constructor(private waterSvc: WaterService, private router: Router, private zone: NgZone, private translate: TranslateService, private cdr: ChangeDetectorRef, private chatTrigger: ChatTriggerService) {}
+  protected override get modalCanvas() { return this.modalChartCanvasRef; }
 
-  openAriaInsight(section: string, event: MouseEvent): void {
-    event.stopPropagation();
-    const p = this.selectedPeriod;
-    const prompts: Record<string, string> = {
+  protected override insightPrompts(p: number): Record<string, string> {
+    return {
       summary: `Analyse les statistiques Eau (${p}j) :\n` +
         `Consommation : ${this.totalConsoM3.toFixed(3)} m³\n` +
         `CO₂ traitement : ${this.totalCo2.toFixed(2)} kgCO₂ | Coût : ${this.totalCost.toFixed(2)} TND\n` +
@@ -126,59 +95,29 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         `Total : ${this.alertCount} alerte(s) · Fuites : ${this.leakCount} compteur(s) affecté(s)\n` +
         `Quelles sont les actions prioritaires à mener ?`,
     };
-    this.chatTrigger.open(prompts[section] ?? `Analyse Eau — ${section} — ${p}j.`);
   }
 
-  ngOnInit(): void {
-    this._buildPeriodOptions();
-    this.dataRange = this.translate.instant('COMMON.LOADING');
-    this.load();
-    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
-      this._buildPeriodOptions();
-      const { from, to } = this.waterSvc.getLastNDaysRange(this.selectedPeriod);
-      this.updateDateRange(from, to);
-      this.buildKpi();
-      this.buildAllCharts();
-    });
-  }
-  ngAfterViewInit(): void { this.chartsReady = true; }
+  // ══════════════════════════════════════════════════════════════
+  // CHARGEMENT
+  // ══════════════════════════════════════════════════════════════
 
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    document.removeEventListener('keydown', this.onEscKey);
-    [this.lineChart, this.donutChart, this.barCo2Chart, this.radarChart, this.groupedBarChart, this.wDailyChart, this.modalChart]
-      .forEach(c => c?.destroy());
+  protected override dateRangeFor(days: number): DateRange {
+    return this.waterSvc.getLastNDaysRange(days);
   }
 
-  load(): void {
-    this.isLoading = true;
-    this.loadError = false;
-    const { from, to } = this.waterSvc.getLastNDaysRange(this.selectedPeriod);
-    this.updateDateRange(from, to);
-
-    forkJoin({
+  protected override fetchData({ from, to }: DateRange): Observable<WaterData> {
+    return forkJoin({
       summaries: this.waterSvc.getAllSummaries(from, to),
       alerts:    this.waterSvc.getAlerts(),
       rt:        this.waterSvc.getRealTimeAll()
-    })
-    .pipe(takeUntil(this.destroy$), finalize(() => this.isLoading = false))
-    .subscribe({
-      next: ({ summaries, alerts, rt }) => {
-        this.summaries = summaries;
-        this.alerts    = alerts;
-        this.rtData    = rt;
-        this.buildKpi();
-        this.loadChart(from, to);
-        setTimeout(() => this.buildAllCharts(), 300);
-      },
-      error: () => { this.loadError = true; }
     });
   }
 
-  onPeriodChange(period: number): void { this.selectedPeriod = period; this.load(); }
+  protected override applyData(data: WaterData): void {
+    this.rtData = data.rt;
+  }
 
-  private loadChart(from: Date, to: Date): void {
+  protected override afterDataLoaded({ from, to }: DateRange): void {
     const firstDevice = this.summaries[0]?.idDevice;
     if (!firstDevice) { this.buildChartBars(); return; }
 
@@ -208,7 +147,11 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  private buildKpi(): void {
+  // ══════════════════════════════════════════════════════════════
+  // DONNÉES DÉRIVÉES
+  // ══════════════════════════════════════════════════════════════
+
+  protected override buildKpi(): void {
     this.totalConsoM3 = this.summaries.reduce((s, d) => s + (d.totalConsoM3 ?? 0), 0);
     this.totalCo2     = this.summaries.reduce((s, d) => s + (d.co2Kg        ?? 0), 0);
     this.totalCost    = this.summaries.reduce((s, d) => s + (d.costTnd      ?? 0), 0);
@@ -218,7 +161,7 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
     const trend     = this.summaries[0]?.trend ?? '+0.0%';
 
     const t = this.translate;
-    const criticals = this.alerts.filter(a => a.severity === 'CRITICAL').length;
+    const criticals = this.countBySeverity('CRITICAL');
     this.kpiCards = [
       {
         label: t.instant('WATER.KPI_CONSUMPTION'), value: this.fmt(this.totalConsoM3, 3),
@@ -261,7 +204,7 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         icon: '<svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" fill="currentColor"/></svg>'
       }
     ];
-    this._buildKpiDefs();
+    this.buildKpiDefs();
   }
 
   private buildChartBars(): void {
@@ -273,28 +216,29 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
       co2:   p.co2   ?? 0,
       debit: 0
     }));
-    setTimeout(() => this.buildAllCharts(), 300);
+    this.scheduleChartsRender();
   }
 
-  // ── Chart.js builders ────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════
+  // CHARTS INLINE
+  // ══════════════════════════════════════════════════════════════
 
-  private buildAllCharts(): void {
-    this.zone.runOutsideAngular(() => {
-      this.buildLineChart();
-      this.buildDonutChart();
-      this.buildBarCo2Chart();
-      this.buildRadarChart();
-      this.buildGroupedWaterBar();
-      this.buildWaterDailyChart();
-    });
-    this.cdr.detectChanges();
+  protected override buildCharts(): void {
+    this.buildLineChart();
+    this.buildDonutChart();
+    this.buildBarCo2Chart();
+    this.buildRadarChart();
+    this.buildGroupedWaterBar();
+    this.buildWaterDailyChart();
   }
 
-  private destroyChart(c: Chart | undefined): void { c?.destroy(); }
+  protected override renderCharts(): void {
+    super.renderCharts();
+    if (!this.isDestroyed) this.cdr.detectChanges();
+  }
 
   private buildLineChart(): void {
     if (!this.lineCanvas) return;
-    this.destroyChart(this.lineChart);
     const pts    = this.chart?.points ?? [];
     const labels = pts.map(p => p.label);
     const data   = pts.map(p => +(p.consoM3 ?? 0).toFixed(3));
@@ -331,12 +275,11 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.lineChart = new Chart(this.lineCanvas.nativeElement, cfg);
+    this.renderChart('line', this.lineCanvas, cfg);
   }
 
   private buildDonutChart(): void {
     if (!this.donutCanvas || !this.summaries.length) return;
-    this.destroyChart(this.donutChart);
     const colors = [PALETTE.water, PALETTE.cyan, PALETTE.green, PALETTE.teal, PALETTE.blue, PALETTE.lime];
     const cfg: ChartConfiguration<'doughnut'> = {
       type: 'doughnut',
@@ -364,12 +307,11 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.donutChart = new Chart(this.donutCanvas.nativeElement, cfg);
+    this.renderChart('donut', this.donutCanvas, cfg);
   }
 
   private buildBarCo2Chart(): void {
     if (!this.barCo2Canvas || !this.summaries.length) return;
-    this.destroyChart(this.barCo2Chart);
     const labels = this.summaries.map(s => `#${s.idDevice}`);
     const cfg: ChartConfiguration<'bar'> = {
       type: 'bar',
@@ -410,12 +352,11 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.barCo2Chart = new Chart(this.barCo2Canvas.nativeElement, cfg);
+    this.renderChart('barCo2', this.barCo2Canvas, cfg);
   }
 
   private buildRadarChart(): void {
     if (!this.radarCanvas || !this.summaries.length) return;
-    this.destroyChart(this.radarChart);
     const colors = [PALETTE.water, PALETTE.cyan, PALETTE.green, PALETTE.teal, PALETTE.blue];
     const maxConso = Math.max(...this.summaries.map(s => s.totalConsoM3 ?? 0), 1);
     const maxCo2   = Math.max(...this.summaries.map(s => s.co2Kg        ?? 0), 1);
@@ -462,8 +403,12 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.radarChart = new Chart(this.radarCanvas.nativeElement, cfg);
+    this.renderChart('radar', this.radarCanvas, cfg);
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // HELPERS TEMPLATE
+  // ══════════════════════════════════════════════════════════════
 
   get chartMax(): number {
     if (!this.chartBars.length) return 100;
@@ -473,13 +418,6 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
   barH(v: number): number { return Math.round((v / this.chartMax) * 100); }
 
   get rtForTable(): RtWmDto[] { return this.rtData.slice(0, 20); }
-
-  /** Normalise le niveau batterie IoT (255 = alimentation externe = 100%) */
-  normBatt(v: number | null | undefined): number {
-    if (v == null) return 0;
-    if (v >= 200)  return 100;   // 255 = alimentation externe / full
-    return Math.min(v, 100);
-  }
 
   statusClass(s: string): string {
     return s === 'OK' ? 'status-ok' : (s === 'LEAK' || s === 'FRAUD') ? 'status-alert' : 'status-warn';
@@ -504,8 +442,6 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
     return m[type] ?? this.translate.instant('WATER.REC_DEFAULT');
   }
 
-  countBySeverity(sev: string): number { return this.alerts.filter(a => a.severity === sev).length; }
-
   get leakCount(): number { return this.rtData.filter(r => r.leak > 0).length; }
   get totalIndex(): number { return this.rtData.reduce((s, r) => s + (r.wmIndex ?? 0), 0); }
 
@@ -513,40 +449,10 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
   get chartTotalCo2():   string { return (this.chart?.totalCo2  ?? 0).toFixed(2); }
   get chartTotalCost():  string { return (this.chart?.totalCost ?? 0).toFixed(2); }
 
-  fmtAlertDate(d: string): string {
-    if (!d) return '—';
-    const dt = new Date(d);
-    const dd = String(dt.getDate()).padStart(2,'0');
-    const mm = String(dt.getMonth()+1).padStart(2,'0');
-    const hh = String(dt.getHours()).padStart(2,'0');
-    const mn = String(dt.getMinutes()).padStart(2,'0');
-    return `${dd}/${mm} ${hh}:${mn}`;
-  }
-
-  private get locale(): string {
-    const l = this.translate.currentLang ?? 'fr';
-    return l === 'ar' ? 'ar-TN' : l === 'en' ? 'en-US' : 'fr-FR';
-  }
-
-  fmt(n: number, dec = 0): string {
-    if (n == null || isNaN(n)) return '0';
-    return n.toLocaleString(this.locale, { minimumFractionDigits: dec, maximumFractionDigits: dec });
-  }
-
-  private fmtDateLabel(d: string): string {
-    if (!d) return '';
-    const p = d.substring(0,10).split('-');
-    return p.length === 3 ? `${p[2]}/${p[1]}` : d;
-  }
-
-  private updateDateRange(from: Date, to: Date): void {
-    const o: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' };
-    this.dataRange = `${from.toLocaleDateString(this.locale, o)} → ${to.toLocaleDateString(this.locale, o)}`;
-  }
+  // (suite) CHARTS INLINE
 
   private buildGroupedWaterBar(): void {
     if (!this.groupedBarCanvas || !this.summaries.length) return;
-    this.destroyChart(this.groupedBarChart);
     const colors = [PALETTE.water, PALETTE.cyan, PALETTE.green, PALETTE.teal, PALETTE.blue, PALETTE.lime];
     const labels = this.summaries.map(s => `#${s.idDevice}`);
     const cfg: ChartConfiguration<'bar'> = {
@@ -589,12 +495,11 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.groupedBarChart = new Chart(this.groupedBarCanvas.nativeElement, cfg);
+    this.renderChart('groupedBar', this.groupedBarCanvas, cfg);
   }
 
   private buildWaterDailyChart(): void {
     if (!this.wDailyCanvas) return;
-    this.wDailyChart?.destroy();
     const pts = this.chart?.points ?? [];
     const cfg: ChartConfiguration<'bar'> = {
       type: 'bar',
@@ -622,43 +527,26 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.wDailyChart = new Chart(this.wDailyCanvas.nativeElement, cfg);
+    this.renderChart('daily', this.wDailyCanvas, cfg);
   }
 
-  openChartModal(type: 'evolution' | 'co2cost' | 'consoByMeter' = 'evolution'): void {
+  // ══════════════════════════════════════════════════════════════
+  // MODAL CHART — Évolution, CO₂/Coût & répartition par compteur
+  // ══════════════════════════════════════════════════════════════
+
+  openChartModal(type: ChartModalType = 'evolution'): void {
     this.chartModalType  = type;
     this.chartModalTitle = type === 'co2cost'      ? this.translate.instant('ENERGY.CO2_COST_PER_METER')
                          : type === 'consoByMeter' ? this.translate.instant('ENERGY.CONSO_BY_METER')
                          :                           this.translate.instant('ENERGY.EVOLUTION') + ' — m³';
     this.chartModalBadge = type === 'evolution' ? 'Ligne' : 'Barres';
-    this.chartModalOpen = true;
-    document.addEventListener('keydown', this.onEscKey);
-    setTimeout(() => this.initModalChart(), 80);
+    this.showChartModal();
   }
 
-  closeChartModal(): void {
-    this.chartModalOpen = false;
-    document.removeEventListener('keydown', this.onEscKey);
-    this.modalChart?.destroy();
-    this.modalChart = null;
-  }
-
-  handleChartModalBackdrop(e: MouseEvent): void {
-    if ((e.target as HTMLElement).classList.contains('water-chart-modal-backdrop')) {
-      this.closeChartModal();
-    }
-  }
-
-  private initModalChart(): void {
-    const canvas = this.modalChartCanvasRef?.nativeElement;
-    if (!canvas) return;
-    this.modalChart?.destroy();
-    this.modalChart = null;
-    this.zone.runOutsideAngular(() => {
-      if (this.chartModalType === 'co2cost')      this.buildModalBarCo2(canvas);
-      else if (this.chartModalType === 'consoByMeter') this.buildModalGroupedBar(canvas);
-      else                                         this.buildModalEvolution(canvas);
-    });
+  protected override buildModalChart(canvas: HTMLCanvasElement): void {
+    if (this.chartModalType === 'co2cost')           this.buildModalBarCo2(canvas);
+    else if (this.chartModalType === 'consoByMeter') this.buildModalGroupedBar(canvas);
+    else                                             this.buildModalEvolution(canvas);
   }
 
   private buildModalEvolution(canvas: HTMLCanvasElement): void {
@@ -671,7 +559,7 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
     gr.addColorStop(0.6, 'rgba(6,182,212,0.08)');
     gr.addColorStop(1,   'rgba(6,182,212,0.00)');
 
-    this.modalChart = new Chart(ctx, {
+    this.renderChart(MODAL_CHART, ctx, {
       type: 'line',
       data: {
         labels:   pts.map(p => p.label),
@@ -722,7 +610,7 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private buildModalBarCo2(canvas: HTMLCanvasElement): void {
     if (!this.summaries.length) return;
-    this.modalChart = new Chart(canvas, {
+    this.renderChart(MODAL_CHART, canvas, {
       type: 'bar',
       data: {
         labels: this.summaries.map(s => `#${s.idDevice}`),
@@ -768,7 +656,7 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
   private buildModalGroupedBar(canvas: HTMLCanvasElement): void {
     if (!this.summaries.length) return;
     const colors = [PALETTE.water, PALETTE.cyan, PALETTE.green, PALETTE.teal, PALETTE.blue, PALETTE.lime];
-    this.modalChart = new Chart(canvas, {
+    this.renderChart(MODAL_CHART, canvas, {
       type: 'bar',
       data: {
         labels: this.summaries.map(s => `#${s.idDevice}`),
@@ -801,33 +689,16 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  navigateTo(p: string): void { this.router.navigate([p]); }
-  goBack(): void { this.router.navigate(['/dashboard']); }
+  // ══════════════════════════════════════════════════════════════
+  // KPI DETAIL PANEL
+  // ══════════════════════════════════════════════════════════════
 
-  // ── KPI Detail Panel ──────────────────────────────────────────
-  selectedKpi: string | null = null;
-  openKpi(key: string): void { this.selectedKpi = key; this.currentKpiDef = this.kpiDefs[key] ?? null; }
-  closeKpi(): void { this.selectedKpi = null; this.currentKpiDef = null; }
-
-  kpiDefs: Record<string, any> = {};
-  currentKpiDef: any = null;
-
-  private _buildPeriodOptions(): void {
-    const t = this.translate;
-    this.periodOptions = [
-      { label: t.instant('ENERGY.PERIOD_24H'), value: 1  },
-      { label: t.instant('ENERGY.PERIOD_7D'),  value: 7  },
-      { label: t.instant('ENERGY.PERIOD_30D'), value: 30 },
-      { label: t.instant('ENERGY.PERIOD_3M'),  value: 90 },
-    ];
-  }
-
-  private _buildKpiDefs(): void {
+  private buildKpiDefs(): void {
     const t = this.translate;
     const leakCount  = this.rtData.filter(r => r.leak > 0).length;
     const totalIndex = this.rtData.reduce((s, r) => s + (r.wmIndex ?? 0), 0);
     const criticals  = this.countBySeverity('CRITICAL');
-    this.kpiDefs = {
+    this.setKpiDefs({
       conso: {
         title: t.instant('WATER.KPI_CONSUMPTION') + ' (m³)',
         accent: '#06b6d4',
@@ -908,7 +779,6 @@ export class WaterComponent implements OnInit, OnDestroy, AfterViewInit {
         recommendations: [t.instant('WATER.KPI_REC_INDEX_1'), t.instant('WATER.KPI_REC_INDEX_2'), t.instant('WATER.KPI_REC_INDEX_3')],
         devices: this.rtData.slice(0, 10).map(r => ({ id: r.idDevice, val: (r.wmIndex ?? 0).toLocaleString(this.locale), unit: 'L', ok: r.leak === 0 && r.fraud === 0, badge: r.status ?? 'OK' }))
       }
-    };
-    if (this.selectedKpi) this.currentKpiDef = this.kpiDefs[this.selectedKpi] ?? null;
+    });
   }
 }

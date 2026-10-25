@@ -8,6 +8,11 @@ import { WaterService, RtWmDto } from './water.service';
 import { GazService, RtGmDto } from './gaz.service';
 import { ElectricityService, RtEnPDto } from './electricity.service';
 import { FuelService, FuelLatestDto } from './fuel.service';
+import { normalizeBattery } from '../shared/battery.util';
+
+// ════════════════════════════════════════════════════════════════════════════
+// PARTIE PDF — génération des rapports PDF (jsPDF) par domaine et par filtre
+// ════════════════════════════════════════════════════════════════════════════
 
 // ── Public types ────────────────────────────────────────────────────────────
 
@@ -93,21 +98,21 @@ export class PdfReportService {
   private async filterWater(f: ReportFilter): Promise<SensorRow[]> {
     const all = await firstValueFrom(this.waterSvc.getRealTimeAll().pipe(catchError(() => of([]))));
     return this.applyFilter(all.map(s => waterToRow(s)), f, all.map(s => ({
-      status: s.status, battery: s.batteryLevel, date: s.date,
+      status: s.status, battery: normalizeBattery(s.batteryLevel), date: s.date,
     })));
   }
 
   private async filterGaz(f: ReportFilter): Promise<SensorRow[]> {
     const all = await firstValueFrom(this.gazSvc.getRealTimeAll().pipe(catchError(() => of([]))));
     return this.applyFilter(all.map(s => gazToRow(s)), f, all.map(s => ({
-      status: s.status, battery: s.batteryLevel, date: s.date,
+      status: s.status, battery: normalizeBattery(s.batteryLevel), date: s.date,
     })));
   }
 
   private async filterElec(f: ReportFilter): Promise<SensorRow[]> {
     const all = await firstValueFrom(this.elecSvc.getRealTimeAll().pipe(catchError(() => of([]))));
     return this.applyFilter(all.map(s => elecToRow(s)), f, all.map(s => ({
-      status: s.status, battery: s.batteryLevel, date: s.date,
+      status: s.status, battery: normalizeBattery(s.batteryLevel), date: s.date,
     })));
   }
 
@@ -531,9 +536,9 @@ function waterToRow(s: RtWmDto): SensorRow {
     id        : `#${s.idDevice}`,
     status    : statusLabel(s.status),
     rawStatus : s.status,
-    rawBattery: s.batteryLevel,
+    rawBattery: normalizeBattery(s.batteryLevel),
     col3      : s.wmIndex.toFixed(1),
-    col4      : `${s.batteryLevel}%`,
+    col4      : `${normalizeBattery(s.batteryLevel).toFixed(0)}%`,
     col5      : s.leak  ? '⚠ OUI' : 'non',
     col6      : s.fraud ? '⚠ OUI' : 'non',
     col7      : `${s.rssi} dBm`,
@@ -546,10 +551,10 @@ function gazToRow(s: RtGmDto): SensorRow {
     id        : `#${s.idDevice}`,
     status    : statusLabel(s.status),
     rawStatus : s.status,
-    rawBattery: s.batteryLevel,
+    rawBattery: normalizeBattery(s.batteryLevel),
     col3      : s.index.toFixed(1),
     col4      : s.avgDebitPerMin.toFixed(3),
-    col5      : `${s.batteryLevel}%`,
+    col5      : `${normalizeBattery(s.batteryLevel).toFixed(0)}%`,
     col6      : s.leak ? '⚠ OUI' : 'non',
     col7      : `${s.rssi} dBm`,
     updatedAt : shortDate(s.date),
@@ -563,7 +568,7 @@ function elecToRow(s: RtEnPDto): SensorRow {
     id        : `#${s.idDevice}`,
     status    : statusLabel(s.status),
     rawStatus : s.status,
-    rawBattery: s.batteryLevel,
+    rawBattery: normalizeBattery(s.batteryLevel),
     col3      : s.enL1.toFixed(2),
     col4      : s.enL2.toFixed(2),
     col5      : s.enL3.toFixed(2),

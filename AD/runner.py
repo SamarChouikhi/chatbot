@@ -134,7 +134,7 @@ def run_domain(
                 n_anom = int(_col(hot_result_df, "is_anomaly").sum())
                 _log.info("[HotStart:%s] %d lignes lues | %d anomalies", domain, len(hot_result_df), n_anom)
             else:
-                _log.error("[HotStart:%s] échec ou résultat absent (exit=%d)", domain, rc)
+                _log.error("[HotStart:%s] échec ou résultat absent (%s)", domain, _describe_rc(rc))
 
         # ── ColdStart — un subprocess par device froid ────────────────────────
         if cold_devices:
@@ -177,7 +177,7 @@ def run_domain(
                         domain, dev_id, len(part), n_anom,
                     )
                 else:
-                    _log.error("[ColdStart:%s][%s] échec (exit=%d)", domain, dev_id, rc)
+                    _log.error("[ColdStart:%s][%s] échec (%s)", domain, dev_id, _describe_rc(rc))
 
             if cold_parts:
                 cold_result_df = pd.concat(cold_parts, ignore_index=True)
@@ -258,6 +258,14 @@ def _run_coldstart(
     )
 
 
+#: Sentinels for _run_proc failures that never reach a real process exit code
+#: (POSIX/Windows exit codes are 0-255) — lets callers/logs distinguish a
+#: timeout or a launch failure (bad interpreter/cwd/permissions) from an
+#: actual non-zero return code from the HotStart/ColdStart script itself.
+_EXIT_TIMEOUT          = -1
+_EXIT_SUBPROCESS_ERROR = -2
+
+
 def _run_proc(cmd: list, cwd: Path, label: str, timeout: int) -> int:
     _log.debug("[%s] %s", label, " ".join(str(c) for c in cmd))
     try:
@@ -269,11 +277,27 @@ def _run_proc(cmd: list, cwd: Path, label: str, timeout: int) -> int:
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        _log.error("[%s] Timeout après %ds", label, timeout)
-        return -1
+        _log.error("[%s] Timeout après %ds — processus tué, résultat ignoré", label, timeout)
+        return _EXIT_TIMEOUT
+    except OSError as exc:
+        # Interpréteur introuvable, cwd invalide, permissions... — jamais un
+        # échec du script AD lui-même : on l'isole d'un vrai exit code non-nul
+        # pour ne pas laisser croire à un bug dans HotStart/ColdStart.
+        _log.error("[%s] Échec du lancement du subprocess : %s", label, exc)
+        return _EXIT_SUBPROCESS_ERROR
+
     if proc.returncode != 0:
         _log.error("[%s] exit=%d\n%s", label, proc.returncode, proc.stderr[-2000:])
     return proc.returncode
+
+
+def _describe_rc(rc: int) -> str:
+    """Human-readable label for a _run_proc return code, for log messages."""
+    if rc == _EXIT_TIMEOUT:
+        return "timeout"
+    if rc == _EXIT_SUBPROCESS_ERROR:
+        return "erreur de lancement (interpréteur/cwd/permissions)"
+    return f"exit={rc}"
 
 
 # ── Post-processing helpers ────────────────────────────────────────────────────

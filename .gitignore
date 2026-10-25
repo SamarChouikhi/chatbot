@@ -5,7 +5,8 @@
 *.key
 *.pem
 .key_state.json
-
+**/CLAUDE.md
+**/DOCUMENTATION.md
 # === Python ===
 __pycache__/
 *.py[cod]
@@ -55,6 +56,8 @@ AD/ColdStart/outputs/
 *.pt
 *.pkl
 *.npy
+
+mlruns/
 
 # === Temp / exports ===
 tmp/

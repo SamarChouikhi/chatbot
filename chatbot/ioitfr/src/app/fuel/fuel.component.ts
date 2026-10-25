@@ -1,28 +1,14 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, NgZone } from '@angular/core';
-import { Router } from '@angular/router';
-import { Subject, forkJoin } from 'rxjs';
-import { ChatTriggerService } from '../core/services/chat-trigger.service';
-import { takeUntil, finalize } from 'rxjs/operators';
-import { TranslateService } from '@ngx-translate/core';
+import { Component, ViewChild, ElementRef } from '@angular/core';
+import { Observable, forkJoin } from 'rxjs';
 import {
   FuelService, FuelSummaryDto, FuelAlertDto, FuelLatestDto
 } from '../services/fuel.service';
-import {
-  Chart, ChartConfiguration,
-  BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend
-} from 'chart.js';
-
-Chart.register(
-  BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend
-);
+import { ChartConfiguration } from 'chart.js';
+import { CHART_BASE } from '../shared/chart-setup';
+import { DateRange, DomainDashboardBase, MODAL_CHART } from '../shared/domain-dashboard.base';
 
 const FP = {
+  ...CHART_BASE,
   main: '#22c55e', mainDim: 'rgba(34,197,94,0.15)',
   cyan: '#06b6d4', cyanDim: 'rgba(6,182,212,0.15)',
   green: '#10b981', greenDim: 'rgba(16,185,129,0.15)',
@@ -30,7 +16,6 @@ const FP = {
   blue: '#0ea5e9', blueDim: 'rgba(14,165,233,0.15)',
   deepBlue: '#0369a1',
   red: '#e74c3c',
-  grid: 'rgba(255,255,255,0.06)', text: 'rgba(255,255,255,0.45)'
 };
 
 interface KpiCard {
@@ -40,36 +25,30 @@ interface KpiCard {
   icon: string;
 }
 
+interface FuelData {
+  summaries: FuelSummaryDto[];
+  alerts:    FuelAlertDto[];
+  latest:    FuelLatestDto[];
+}
+
 @Component({
   selector: 'app-fuel',
   templateUrl: './fuel.component.html',
   styleUrls: ['./fuel.component.scss']
 })
-export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
+export class FuelComponent extends DomainDashboardBase<FuelSummaryDto, FuelAlertDto, FuelData> {
 
   @ViewChild('fDonutCanvas')   fDonutCanvas!:   ElementRef<HTMLCanvasElement>;
   @ViewChild('fBarCanvas')     fBarCanvas!:     ElementRef<HTMLCanvasElement>;
   @ViewChild('fRadarCanvas')   fRadarCanvas!:   ElementRef<HTMLCanvasElement>;
   @ViewChild('fModalCanvas')   fModalCanvas!:   ElementRef<HTMLCanvasElement>;
 
-  private fDonutChart:   any = null;
-  private fBarChart:     any = null;
-  private fRadarChart:   any = null;
-  private fModalChart:   any = null;
+  protected override readonly modalBackdropClass = 'elec-chart-modal-backdrop';
+  protected override readonly insightLabel = 'Carburant';
 
-  isLoading        = false;
-  loadError        = false;
+  latest: FuelLatestDto[] = [];
 
-  selectedPeriod = 30;
-  periodOptions: { label: string; value: number }[] = [];
-  dataRange = '';
-
-  summaries: FuelSummaryDto[] = [];
-  alerts:    FuelAlertDto[]   = [];
-  latest:    FuelLatestDto[]  = [];
-
-  kpiCards:  KpiCard[] = [];
-  kpiDefs:   Record<string, any> = {};
+  kpiCards: KpiCard[] = [];
 
   totalConsoL      = 0;
   totalDistanceKm  = 0;
@@ -77,20 +56,12 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
   totalCost        = 0;
   alertCount       = 0;
 
-  chartModalOpen = false;
+  constructor(private fuelSvc: FuelService) { super(); }
 
-  private destroy$ = new Subject<void>();
+  protected override get modalCanvas() { return this.fModalCanvas; }
 
-  private onEscKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') this.closeChartModal();
-  };
-
-  constructor(private fuelSvc: FuelService, private router: Router, private zone: NgZone, private translate: TranslateService, private chatTrigger: ChatTriggerService) {}
-
-  openAriaInsight(section: string, event: MouseEvent): void {
-    event.stopPropagation();
-    const p = this.selectedPeriod;
-    const prompts: Record<string, string> = {
+  protected override insightPrompts(p: number): Record<string, string> {
+    return {
       summary: `Analyse les statistiques Carburant (${p}j) :\n` +
         `Consommation : ${this.totalConsoL.toFixed(1)} L | Distance : ${this.totalDistanceKm.toFixed(0)} km\n` +
         `CO₂ émis : ${this.totalCo2.toFixed(1)} kgCO₂ | Coût : ${this.totalCost.toFixed(2)} TND\n` +
@@ -111,56 +82,25 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         `Total : ${this.alertCount} alerte(s) · Véhicules : ${this.summaries.length}\n` +
         `Quelles sont les actions prioritaires à mener ?`,
     };
-    this.chatTrigger.open(prompts[section] ?? `Analyse Carburant — ${section} — ${p}j.`);
   }
 
-  ngOnInit(): void {
-    this.dataRange = this.translate.instant('COMMON.LOADING');
-    this._buildPeriodOptions();
-    this.load();
-    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
-      this._buildPeriodOptions();
-      const { from, to } = this.fuelSvc.getLastNDaysRange(this.selectedPeriod);
-      this.updateDateRange(from, to);
-      this.buildKpi();
-      this.buildAllFuelCharts();
-    });
-  }
-  ngAfterViewInit(): void {}
-  ngOnDestroy(): void {
-    this.destroy$.next(); this.destroy$.complete();
-    document.removeEventListener('keydown', this.onEscKey);
-    [this.fDonutChart, this.fBarChart, this.fRadarChart, this.fModalChart]
-      .forEach((c: any) => c?.destroy());
+  protected override dateRangeFor(days: number): DateRange {
+    return this.fuelSvc.getLastNDaysRange(days);
   }
 
-  load(): void {
-    this.isLoading = true;
-    this.loadError = false;
-    const { from, to } = this.fuelSvc.getLastNDaysRange(this.selectedPeriod);
-    this.updateDateRange(from, to);
-
-    forkJoin({
+  protected override fetchData({ from, to }: DateRange): Observable<FuelData> {
+    return forkJoin({
       summaries: this.fuelSvc.getAllSummaries(from, to),
       alerts:    this.fuelSvc.getAlerts(),
       latest:    this.fuelSvc.getAllLatest()
-    })
-    .pipe(takeUntil(this.destroy$), finalize(() => this.isLoading = false))
-    .subscribe({
-      next: ({ summaries, alerts, latest }) => {
-        this.summaries = summaries;
-        this.alerts    = alerts;
-        this.latest    = latest;
-        this.buildKpi();
-        setTimeout(() => this.buildAllFuelCharts(), 300);
-      },
-      error: () => { this.loadError = true; }
     });
   }
 
-  onPeriodChange(period: number): void { this.selectedPeriod = period; this.load(); }
+  protected override applyData(data: FuelData): void {
+    this.latest = data.latest;
+  }
 
-  private buildKpi(): void {
+  protected override buildKpi(): void {
     this.totalConsoL     = this.summaries.reduce((s, d) => s + (d.totalConsoL     ?? 0), 0);
     this.totalDistanceKm = this.summaries.reduce((s, d) => s + (d.totalDistanceKm ?? 0), 0);
     this.totalCo2        = this.summaries.reduce((s, d) => s + (d.co2Kg           ?? 0), 0);
@@ -170,7 +110,7 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
     const t        = this.translate;
     const trend    = this.summaries[0]?.trend ?? '+0.0%';
     const avgEff   = this.totalDistanceKm > 0 ? (this.totalConsoL / this.totalDistanceKm) * 100 : 0;
-    const criticals = this.alerts.filter(a => a.severity === 'CRITICAL').length;
+    const criticals = this.countBySeverity('CRITICAL');
 
     this.kpiCards = [
       {
@@ -215,7 +155,7 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     ];
 
-    this._buildKpiDefs();
+    this.buildKpiDefs();
   }
 
   get consoGaugeWidth(): string {
@@ -228,17 +168,14 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
     return Math.min(avgEff / 20 * 100, 100).toFixed(1) + '%';
   }
 
-  private buildAllFuelCharts(): void {
-    this.zone.runOutsideAngular(() => {
-      this.buildFuelDonut();
-      this.buildFuelBar();
-      this.buildFuelRadar();
-    });
+  protected override buildCharts(): void {
+    this.buildFuelDonut();
+    this.buildFuelBar();
+    this.buildFuelRadar();
   }
 
   private buildFuelDonut(): void {
     if (!this.fDonutCanvas || !this.summaries.length) return;
-    this.fDonutChart?.destroy();
     const colors = [FP.main, FP.cyan, FP.green, FP.teal, FP.blue, FP.deepBlue];
     const cfg: ChartConfiguration<'doughnut'> = {
       type: 'doughnut',
@@ -255,17 +192,16 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         responsive: true, maintainAspectRatio: false, cutout: '68%',
         plugins: {
           legend: { position: 'bottom', labels: { color: FP.text, font: { size: 10 }, padding: 10, boxWidth: 10 } },
-          tooltip: { backgroundColor: 'rgba(6,12,26,0.95)', titleColor: FP.main, bodyColor: '#fff',
+          tooltip: { backgroundColor: FP.tooltip, titleColor: FP.main, bodyColor: '#fff',
             callbacks: { label: (ctx: any) => ` ${ctx.label} : ${ctx.parsed} L` } }
         }
       }
     };
-    this.fDonutChart = new Chart(this.fDonutCanvas.nativeElement, cfg);
+    this.renderChart('donut', this.fDonutCanvas, cfg);
   }
 
   private buildFuelBar(): void {
     if (!this.fBarCanvas || !this.summaries.length) return;
-    this.fBarChart?.destroy();
     const cfg: ChartConfiguration<'bar'> = {
       type: 'bar',
       data: {
@@ -287,7 +223,7 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { labels: { color: FP.text, font: { size: 10 }, boxWidth: 10 } },
-          tooltip: { backgroundColor: 'rgba(6,12,26,0.95)', titleColor: '#fff', bodyColor: FP.text }
+          tooltip: { backgroundColor: FP.tooltip, titleColor: '#fff', bodyColor: FP.text }
         },
         scales: {
           x: { grid: { color: FP.grid }, ticks: { color: FP.text, font: { size: 10 } } },
@@ -295,12 +231,11 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.fBarChart = new Chart(this.fBarCanvas.nativeElement, cfg);
+    this.renderChart('bar', this.fBarCanvas, cfg);
   }
 
   private buildFuelRadar(): void {
     if (!this.fRadarCanvas || !this.summaries.length) return;
-    this.fRadarChart?.destroy();
     const colors = [FP.main, FP.cyan, FP.green, FP.teal, FP.blue];
     const maxConso = Math.max(...this.summaries.map(s => s.totalConsoL    ?? 0), 1);
     const maxDist  = Math.max(...this.summaries.map(s => s.totalDistanceKm ?? 0), 1);
@@ -336,7 +271,7 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { position: 'bottom', labels: { color: FP.text, font: { size: 10 }, boxWidth: 10 } },
-          tooltip: { backgroundColor: 'rgba(6,12,26,0.95)', titleColor: '#fff', bodyColor: FP.text }
+          tooltip: { backgroundColor: FP.tooltip, titleColor: '#fff', bodyColor: FP.text }
         },
         scales: {
           r: {
@@ -348,41 +283,22 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.fRadarChart = new Chart(this.fRadarCanvas.nativeElement, cfg);
+    this.renderChart('radar', this.fRadarCanvas, cfg);
   }
 
   // ── Modal chart ────────────────────────────────────────────────
 
   openChartModal(): void {
-    this.chartModalOpen = true;
-    document.addEventListener('keydown', this.onEscKey);
-    setTimeout(() => this.initModalChart(), 80);
+    this.showChartModal();
   }
 
-  closeChartModal(): void {
-    this.chartModalOpen = false;
-    document.removeEventListener('keydown', this.onEscKey);
-    this.fModalChart?.destroy();
-    this.fModalChart = null;
-  }
-
-  handleChartModalBackdrop(e: MouseEvent): void {
-    if ((e.target as HTMLElement).classList.contains('elec-chart-modal-backdrop')) {
-      this.closeChartModal();
-    }
-  }
-
-  private initModalChart(): void {
-    const canvas = this.fModalCanvas?.nativeElement;
-    if (!canvas) return;
-    this.fModalChart?.destroy();
-    this.fModalChart = null;
-    this.zone.runOutsideAngular(() => this.buildModalBar(canvas));
+  protected override buildModalChart(canvas: HTMLCanvasElement): void {
+    this.buildModalBar(canvas);
   }
 
   private buildModalBar(canvas: HTMLCanvasElement): void {
     if (!this.summaries.length) return;
-    this.fModalChart = new Chart(canvas, {
+    this.renderChart(MODAL_CHART, canvas, {
       type: 'bar',
       data: {
         labels: this.summaries.map(s => `#${s.deviceId}`),
@@ -405,7 +321,7 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: true, position: 'top', labels: { color: FP.text, font: { size: 11 }, boxWidth: 10, padding: 16 } },
-          tooltip: { backgroundColor: 'rgba(6,12,26,0.95)', titleColor: '#fff', bodyColor: FP.text }
+          tooltip: { backgroundColor: FP.tooltip, titleColor: '#fff', bodyColor: FP.text }
         },
         scales: {
           x: { grid: { color: FP.grid }, ticks: { color: FP.text, font: { size: 10 } } },
@@ -416,15 +332,6 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // ── Helpers ────────────────────────────────────────────────────
-
-  private _buildPeriodOptions(): void {
-    this.periodOptions = [
-      { label: this.translate.instant('ENERGY.PERIOD_24H'), value: 1  },
-      { label: this.translate.instant('ENERGY.PERIOD_7D'),  value: 7  },
-      { label: this.translate.instant('ENERGY.PERIOD_30D'), value: 30 },
-      { label: this.translate.instant('ENERGY.PERIOD_3M'),  value: 90 },
-    ];
-  }
 
   get latestForTable(): FuelLatestDto[] { return this.latest.slice(0, 20); }
 
@@ -454,50 +361,13 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
     return m[type] ?? this.translate.instant('FUEL.REC_DEFAULT');
   }
 
-  countBySeverity(sev: string): number { return this.alerts.filter(a => a.severity === sev).length; }
-
-  fmtAlertDate(d: string): string {
-    if (!d) return '—';
-    const dt = new Date(d);
-    if (isNaN(dt.getTime())) return d;
-    const dd = String(dt.getDate()).padStart(2,'0');
-    const mm = String(dt.getMonth()+1).padStart(2,'0');
-    const hh = String(dt.getHours()).padStart(2,'0');
-    const mn = String(dt.getMinutes()).padStart(2,'0');
-    return `${dd}/${mm} ${hh}:${mn}`;
-  }
-
-  private get locale(): string {
-    const l = this.translate.currentLang ?? 'fr';
-    return l === 'ar' ? 'ar-TN' : l === 'en' ? 'en-US' : 'fr-FR';
-  }
-
-  fmt(n: number, dec = 0): string {
-    if (n == null || isNaN(n)) return '0';
-    return n.toLocaleString(this.locale, { minimumFractionDigits: dec, maximumFractionDigits: dec });
-  }
-
-  private updateDateRange(from: Date, to: Date): void {
-    const o: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' };
-    this.dataRange = `${from.toLocaleDateString(this.locale, o)} → ${to.toLocaleDateString(this.locale, o)}`;
-  }
-
-  navigateTo(p: string): void { this.router.navigate([p]); }
-  goBack():              void { this.router.navigate(['/dashboard']); }
-
-  selectedKpi:    string | null = null;
-  currentKpiDef:  any           = null;
-
-  openKpi(key: string): void { this.selectedKpi = key; this.currentKpiDef = this.kpiDefs[key] ?? null; }
-  closeKpi():           void { this.selectedKpi = null; this.currentKpiDef = null; }
-
-  private _buildKpiDefs(): void {
+  private buildKpiDefs(): void {
     const t        = this.translate;
     const avgEff   = this.totalDistanceKm > 0 ? (this.totalConsoL / this.totalDistanceKm) * 100 : 0;
-    const criticals = this.alerts.filter(a => a.severity === 'CRITICAL').length;
+    const criticals = this.countBySeverity('CRITICAL');
     const nSumm    = this.summaries.length;
 
-    this.kpiDefs = {
+    this.setKpiDefs({
       conso: {
         title: t.instant('FUEL.KPI_CONSUMPTION'), value: this.fmt(this.totalConsoL, 1), unit: 'L',
         accent: '#22c55e',
@@ -561,11 +431,6 @@ export class FuelComponent implements OnInit, OnDestroy, AfterViewInit {
         recommendations: [t.instant('FUEL.KPI_REC_ALERTS_1'), t.instant('FUEL.KPI_REC_ALERTS_2')],
         devices: this.alerts.slice(0, 10).map(a => ({ id: a.deviceId, val: a.type, unit: a.severity, ok: a.severity !== 'CRITICAL', badge: a.severity }))
       }
-    };
-
-    // Met à jour currentKpiDef si un KPI est déjà ouvert
-    if (this.selectedKpi) {
-      this.currentKpiDef = this.kpiDefs[this.selectedKpi] ?? null;
-    }
+    });
   }
 }

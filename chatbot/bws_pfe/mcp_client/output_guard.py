@@ -25,6 +25,8 @@ HALLUCINATION_SIGNALS: list[str] = [
     '[value]', '[id]', '[données]', '[capteur]', '[device]',
     'placeholder', 'n/a (', '{{', '}}',
     'données fictives', 'exemple de réponse',
+    # Identifiants fictifs des few-shot du prompt système : leur présence = exemple recopié
+    'exemple-',
     'je ne suis pas sûr', "je n'ai pas accès à ces données",
 ]
 

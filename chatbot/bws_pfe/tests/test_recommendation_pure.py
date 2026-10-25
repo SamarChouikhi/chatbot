@@ -1,11 +1,9 @@
 """Tests unitaires — api/pipeline/recommendation_engine.py (fonctions pures)"""
 import json
 import pytest
-from api.pipeline.recommendation_engine import (
-    _parse_json_response,
-    _validate_reasoning,
-    _rule_based_fallback,
-)
+from api.pipeline.recommendation_engine import _flag_implausible_savings
+from api.pipeline.reco.fallback import _rule_based_fallback
+from api.pipeline.reco.llm import _parse_json_response, _validate_reasoning
 
 
 # ── _parse_json_response() ────────────────────────────────────────────────────
@@ -241,3 +239,50 @@ class TestRuleBasedFallback:
     def test_root_cause_is_none(self):
         result = _rule_based_fallback(self._overconsumption(), 'energy')
         assert result['root_cause'] is None
+
+
+# ── _flag_implausible_savings() ───────────────────────────────────────────────
+
+class TestImplausibleSavings:
+    def _leak(self, saving):
+        return {
+            'rec_type':             'LEAK_RISK',
+            'device_id':            '4065',
+            'label':                'Eau',
+            'hours_range':          '1h–5h',
+            'nocturnal_excess':     78050.0,
+            'unit':                 'm³',
+            'estimated_saving_tnd': saving,
+        }
+
+    def test_plausible_saving_kept(self):
+        [s] = _flag_implausible_savings([self._leak(120.0)])
+        assert s['estimated_saving_tnd'] == 120.0
+        assert not s.get('saving_unreliable')
+
+    def test_implausible_saving_removed(self):
+        [s] = _flag_implausible_savings([self._leak(1_756_125.0)])
+        assert s['estimated_saving_tnd'] is None
+        assert s['saving_unreliable'] is True
+
+    def test_missing_saving_untouched(self):
+        [s] = _flag_implausible_savings([self._leak(None)])
+        assert not s.get('saving_unreliable')
+
+    def test_fallback_has_no_amount_nor_volume(self):
+        [s] = _flag_implausible_savings([self._leak(1_756_125.0)])
+        result = _rule_based_fallback(s, 'water')
+        assert result['estimated_saving_tnd'] is None
+        assert 'TND' not in result['description']
+        assert '78050' not in result['description']
+        assert set(result['i18n']) == {'en', 'ar'}
+
+    def test_fallback_keeps_leak_priority(self):
+        [s] = _flag_implausible_savings([self._leak(1_756_125.0)])
+        assert _rule_based_fallback(s, 'water')['priority'] == 'critical'
+
+    def test_fallback_mentions_relative_deviation(self):
+        signal = {'rec_type': 'OVERCONSUMPTION', 'device_id': '4065', 'label': 'Eau',
+                  'unit': 'm³', 'deviation_pct': 110.6, 'estimated_saving_tnd': 87_960.0}
+        [s] = _flag_implausible_savings([signal])
+        assert '+110.6 %' in _rule_based_fallback(s, 'water')['description']

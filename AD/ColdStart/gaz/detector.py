@@ -216,10 +216,10 @@ class GazColdStartDetector:
             self._fitted[col] = {}
 
             if cfg.algorithm in (ColdStartAlgorithm.ZSCORE, ColdStartAlgorithm.ENSEMBLE):
-                self._fitted[col]["zscore"] = _ZScoreDetector(profile, cfg.zscore_threshold)
+                self._fitted[col]["zscore"] = _ZScoreDetector(profile, cfg.zscore_threshold_for(col))
 
             if cfg.algorithm in (ColdStartAlgorithm.IQR, ColdStartAlgorithm.ENSEMBLE):
-                self._fitted[col]["iqr"] = _IQRDetector(profile, cfg.iqr_multiplier)
+                self._fitted[col]["iqr"] = _IQRDetector(profile, cfg.iqr_multiplier_for(col))
 
             if cfg.algorithm in (ColdStartAlgorithm.ISOLATION_FOREST, ColdStartAlgorithm.ENSEMBLE):
                 if_det = _IsolationForestDetector(

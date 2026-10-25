@@ -1,34 +1,18 @@
-import {
-  Component, OnInit, OnDestroy, AfterViewInit,
-  ViewChild, ElementRef, NgZone
-} from '@angular/core';
-import { Router } from '@angular/router';
-import { Subject, forkJoin } from 'rxjs';
-import { takeUntil, finalize } from 'rxjs/operators';
-import { TranslateService } from '@ngx-translate/core';
+import { Component, ViewChild, ElementRef } from '@angular/core';
+import { Observable, forkJoin } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import {
   ElectricityService,
   ElecSummaryDto, ElecAlertDto, ElecChartDto,
   RtEnPDto
 } from '../services/electricity.service';
-import { ChatTriggerService } from '../core/services/chat-trigger.service';
-import {
-  Chart, ChartConfiguration,
-  LineController, BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend, Filler
-} from 'chart.js';
-
-Chart.register(
-  LineController, BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend, Filler
-);
+import { ChartConfiguration } from 'chart.js';
+import { CHART_BASE } from '../shared/chart-setup';
+import { DateRange, DomainDashboardBase, MODAL_CHART } from '../shared/domain-dashboard.base';
 
 // ── Palette centralisée ──────────────────────────────────────
 const EP = {
+  ...CHART_BASE,
   main:     '#0ea5e9',
   mainDim:  'rgba(14,165,233,0.15)',
   cyan:     '#06b6d4',
@@ -41,9 +25,6 @@ const EP = {
   blue:     '#0369a1',
   blueDim:  'rgba(3,105,161,0.15)',
   red:      '#e74c3c',
-  grid:     'rgba(255,255,255,0.06)',
-  text:     'rgba(255,255,255,0.45)',
-  tooltip:  'rgba(6,12,26,0.95)'
 };
 
 interface KpiCard {
@@ -59,6 +40,12 @@ interface ChartBar {
   total: number; co2: number;
 }
 
+interface ElecData {
+  summaries: ElecSummaryDto[];
+  alerts:    ElecAlertDto[];
+  rt:        RtEnPDto[];
+}
+
 type ChartModalType = 'evolution' | 'bar';
 
 @Component({
@@ -66,52 +53,25 @@ type ChartModalType = 'evolution' | 'bar';
   templateUrl: './electricity.component.html',
   styleUrls: ['./electricity.component.scss']
 })
-export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
+export class ElectricityComponent extends DomainDashboardBase<ElecSummaryDto, ElecAlertDto, ElecData> {
 
-  // ── Canvas refs (inline charts) ───────────────────────────────
-  @ViewChild('eLineCanvas')    eLineCanvas!:    ElementRef<HTMLCanvasElement>;
-  @ViewChild('eDonutCanvas')   eDonutCanvas!:   ElementRef<HTMLCanvasElement>;
-  @ViewChild('eBarCanvas')     eBarCanvas!:     ElementRef<HTMLCanvasElement>;
-  @ViewChild('eRadarCanvas')   eRadarCanvas!:   ElementRef<HTMLCanvasElement>;
-  @ViewChild('eGaugeCanvas')   eGaugeCanvas!:   ElementRef<HTMLCanvasElement>;
-  // ── Canvas ref (modal chart) ──────────────────────────────────
-  @ViewChild('modalChartCanvas') modalChartCanvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('eLineCanvas')      eLineCanvas!:         ElementRef<HTMLCanvasElement>;
+  @ViewChild('eDonutCanvas')     eDonutCanvas!:        ElementRef<HTMLCanvasElement>;
+  @ViewChild('eBarCanvas')       eBarCanvas!:          ElementRef<HTMLCanvasElement>;
+  @ViewChild('eRadarCanvas')     eRadarCanvas!:        ElementRef<HTMLCanvasElement>;
+  @ViewChild('eGaugeCanvas')     eGaugeCanvas!:        ElementRef<HTMLCanvasElement>;
   @ViewChild('eDailyCanvas')     eDailyCanvas!:        ElementRef<HTMLCanvasElement>;
+  @ViewChild('modalChartCanvas') modalChartCanvasRef!: ElementRef<HTMLCanvasElement>;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private eLineChart!:    any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private eDonutChart!:   any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private eBarChart!:     any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private eRadarChart!:   any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private eGaugeChart!:   any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private modalChart:     any = null;
-  private eDailyChart:    any = null;
+  protected override readonly modalBackdropClass = 'elec-chart-modal-backdrop';
+  protected override readonly insightLabel = 'électricité';
 
-  // ── UI state ──────────────────────────────────────────────────
-  isLoading = false;
-  loadError = false;
+  rtData: RtEnPDto[]          = [];
+  chart:  ElecChartDto | null = null;
 
-  // ── Period ────────────────────────────────────────────────────
-  selectedPeriod = 30;
-  periodOptions: Array<{ label: string; value: number }> = [];
-  dataRange = '';
-
-  // ── API data ──────────────────────────────────────────────────
-  summaries: ElecSummaryDto[] = [];
-  alerts:    ElecAlertDto[]   = [];
-  rtData:    RtEnPDto[]       = [];
-  chart:     ElecChartDto | null = null;
-
-  // ── Derived ───────────────────────────────────────────────────
   kpiCards:  KpiCard[]  = [];
   chartBars: ChartBar[] = [];
 
-  // ── Totals ────────────────────────────────────────────────────
   totalKwh   = 0;
   totalCo2   = 0;
   totalCost  = 0;
@@ -119,34 +79,16 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
   avgCosfi   = 0;
   avgThd     = 0;
 
-  // ── KPI Detail Panel ──────────────────────────────────────────
-  selectedKpi: string | null = null;
-
-  // ── Chart Modal ───────────────────────────────────────────────
-  chartModalOpen  = false;
   chartModalType: ChartModalType = 'evolution';
-
   chartModalTitle = '';
+  dailyChartSub   = '';
 
-  private destroy$  = new Subject<void>();
+  constructor(private elecSvc: ElectricityService) { super(); }
 
-  // Arrow fn — keeps `this` bound when used as DOM listener
-  private onEscKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') this.closeChartModal();
-  };
+  protected override get modalCanvas() { return this.modalChartCanvasRef; }
 
-  constructor(
-    private elecSvc:      ElectricityService,
-    private router:       Router,
-    private zone:         NgZone,
-    private translate:    TranslateService,
-    private chatTrigger:  ChatTriggerService,
-  ) {}
-
-  openAriaInsight(section: string, event: MouseEvent): void {
-    event.stopPropagation();
-    const p = this.selectedPeriod;
-    const prompts: Record<string, string> = {
+  protected override insightPrompts(p: number): Record<string, string> {
+    return {
       summary:
         `Analyse les statistiques électricité (${p}j) :\n` +
         `Consommation : ${this.fmt(this.totalKwh, 1)} kWh | CO₂ : ${this.fmt(this.totalCo2, 1)} kgCO₂ | Coût : ${this.fmt(this.totalCost, 2)} TND | ${this.alertCount} alerte(s)\n` +
@@ -171,69 +113,29 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
         `${this.alertCount} alerte(s) active(s) | cosφ : ${this.avgCosfi.toFixed(3)} | THD : ${this.avgThd.toFixed(1)}%\n` +
         `Quels sont les risques principaux et les priorités d'action immédiates ?`,
     };
-    this.chatTrigger.open(prompts[section] ?? `Analyse électricité — ${section} — ${p}j.`);
-  }
-
-  ngOnInit(): void {
-    this._buildPeriodOptions();
-    this.dataRange = this.translate.instant('COMMON.LOADING');
-    this.load();
-    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
-      this._buildPeriodOptions();
-      const { from, to } = this.elecSvc.getLastNDaysRange(this.selectedPeriod);
-      this.updateDateRange(from, to);
-      this.buildKpi();
-      this.buildAllElecCharts();
-    });
-  }
-
-  ngAfterViewInit(): void {}
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    document.removeEventListener('keydown', this.onEscKey);
-    [this.eLineChart, this.eDonutChart, this.eBarChart,
-     this.eRadarChart, this.eGaugeChart, this.modalChart, this.eDailyChart]
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .forEach((c: any) => c?.destroy());
   }
 
   // ══════════════════════════════════════════════════════════════
   // CHARGEMENT
   // ══════════════════════════════════════════════════════════════
 
-  load(): void {
-    this.isLoading = true;
-    this.loadError = false;
-    const { from, to } = this.elecSvc.getLastNDaysRange(this.selectedPeriod);
-    this.updateDateRange(from, to);
+  protected override dateRangeFor(days: number): DateRange {
+    return this.elecSvc.getLastNDaysRange(days);
+  }
 
-    forkJoin({
+  protected override fetchData({ from, to }: DateRange): Observable<ElecData> {
+    return forkJoin({
       summaries: this.elecSvc.getAllSummaries(from, to),
       alerts:    this.elecSvc.getAlerts(),
       rt:        this.elecSvc.getRealTimeAll()
-    })
-    .pipe(takeUntil(this.destroy$), finalize(() => this.isLoading = false))
-    .subscribe({
-      next: ({ summaries, alerts, rt }) => {
-        this.summaries = summaries;
-        this.alerts    = alerts;
-        this.rtData    = rt;
-        this.buildKpi();
-        this.loadChart(from, to);
-        setTimeout(() => this.buildAllElecCharts(), 300);
-      },
-      error: () => { this.loadError = true; }
     });
   }
 
-  onPeriodChange(period: number): void {
-    this.selectedPeriod = period;
-    this.load();
+  protected override applyData(data: ElecData): void {
+    this.rtData = data.rt;
   }
 
-  private loadChart(from: Date, to: Date): void {
+  protected override afterDataLoaded({ from, to }: DateRange): void {
     const firstDevice = this.summaries[0]?.idDevice;
     if (!firstDevice) { this.buildChartBars(); return; }
 
@@ -249,11 +151,21 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
+  protected override refreshLabels(): void {
+    const t = this.translate;
+    this.chartModalTitle = this.chartModalType === 'evolution'
+      ? t.instant('ENERGY.EVOLUTION') + ' — kWh'
+      : t.instant('ENERGY.CO2_COST_PER_METER');
+    this.dailyChartSub = this.chartBars.length > 0
+      ? t.instant('ENERGY.DAILY_KWH')
+      : t.instant('ENERGY.SUMMARY_BY_METER');
+  }
+
   // ══════════════════════════════════════════════════════════════
   // DONNÉES DÉRIVÉES
   // ══════════════════════════════════════════════════════════════
 
-  private buildKpi(): void {
+  protected override buildKpi(): void {
     this.totalKwh  = this.summaries.reduce((s, d) => s + (d.totalConsoJKwh ?? 0), 0);
     this.totalCo2  = this.summaries.reduce((s, d) => s + (d.co2Kg          ?? 0), 0);
     this.totalCost = this.summaries.reduce((s, d) => s + (d.costTnd        ?? 0), 0);
@@ -268,7 +180,7 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
       : (this.summaries[0]?.avgThd ?? 0);
 
     const trend      = this.summaries[0]?.trend ?? '+0.0%';
-    const criticals  = this.alerts.filter(a => a.severity === 'CRITICAL').length;
+    const criticals  = this.countBySeverity('CRITICAL');
     const t          = this.translate;
 
     this.kpiCards = [
@@ -317,29 +229,13 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
         icon: '<svg viewBox="0 0 24 24"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" fill="currentColor"/></svg>'
       }
     ];
-    this._buildKpiDefs();
-  }
-
-  private _buildPeriodOptions(): void {
-    const t = this.translate;
-    this.periodOptions = [
-      { label: t.instant('ENERGY.PERIOD_24H'), value: 1  },
-      { label: t.instant('ENERGY.PERIOD_7D'),  value: 7  },
-      { label: t.instant('ENERGY.PERIOD_30D'), value: 30 },
-      { label: t.instant('ENERGY.PERIOD_3M'),  value: 90 },
-    ];
-    this.chartModalTitle = this.chartModalType === 'evolution'
-      ? t.instant('ENERGY.EVOLUTION') + ' — kWh'
-      : t.instant('ENERGY.CO2_COST_PER_METER');
-    this.dailyChartSub = this.chartBars.length > 0
-      ? t.instant('ENERGY.DAILY_KWH')
-      : t.instant('ENERGY.SUMMARY_BY_METER');
+    this.buildKpiDefs();
   }
 
   private buildChartBars(): void {
     const pts = this.chart?.points ?? [];
     if (!pts.length) {
-      this.chartBars    = [];
+      this.chartBars     = [];
       this.dailyChartSub = this.translate.instant('ENERGY.SUMMARY_BY_METER');
       return;
     }
@@ -349,27 +245,24 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
       total: p.consKwh ?? 0, co2: p.co2Kg ?? 0
     }));
     this.dailyChartSub = this.translate.instant('ENERGY.DAILY_KWH');
-    setTimeout(() => this.buildAllElecCharts(), 300);
-  }
-
-  private buildAllElecCharts(): void {
-    this.zone.runOutsideAngular(() => {
-      this.buildDailyChart();
-      this.buildElecLine();
-      this.buildElecDonut();
-      this.buildElecBar();
-      this.buildElecRadar();
-      this.buildElecGauge();
-    });
+    this.scheduleChartsRender();
   }
 
   // ══════════════════════════════════════════════════════════════
   // CHARTS INLINE
   // ══════════════════════════════════════════════════════════════
 
+  protected override buildCharts(): void {
+    this.buildDailyChart();
+    this.buildElecLine();
+    this.buildElecDonut();
+    this.buildElecBar();
+    this.buildElecRadar();
+    this.buildElecGauge();
+  }
+
   private buildElecLine(): void {
     if (!this.eLineCanvas) return;
-    this.eLineChart?.destroy();
     const pts = this.chart?.points ?? [];
     const cfg: ChartConfiguration<'line'> = {
       type: 'line',
@@ -400,12 +293,11 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.eLineChart = new Chart(this.eLineCanvas.nativeElement, cfg);
+    this.renderChart('line', this.eLineCanvas, cfg);
   }
 
   private buildElecDonut(): void {
     if (!this.eDonutCanvas || !this.summaries.length) return;
-    this.eDonutChart?.destroy();
     const colors = [EP.main, EP.cyan, EP.green, EP.teal, EP.blue, EP.lime];
     const cfg: ChartConfiguration<'doughnut'> = {
       type: 'doughnut',
@@ -429,12 +321,11 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.eDonutChart = new Chart(this.eDonutCanvas.nativeElement, cfg);
+    this.renderChart('donut', this.eDonutCanvas, cfg);
   }
 
   private buildElecBar(): void {
     if (!this.eBarCanvas || !this.summaries.length) return;
-    this.eBarChart?.destroy();
     const cfg: ChartConfiguration<'bar'> = {
       type: 'bar',
       data: {
@@ -466,12 +357,11 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.eBarChart = new Chart(this.eBarCanvas.nativeElement, cfg);
+    this.renderChart('bar', this.eBarCanvas, cfg);
   }
 
   private buildElecRadar(): void {
     if (!this.eRadarCanvas || !this.summaries.length) return;
-    this.eRadarChart?.destroy();
     const colors  = [EP.main, EP.cyan, EP.green, EP.teal, EP.blue];
     const maxKwh  = Math.max(...this.summaries.map(s => s.totalConsoMKwh ?? 0), 1);
     const maxCo2  = Math.max(...this.summaries.map(s => s.co2Kg          ?? 0), 1);
@@ -520,16 +410,15 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.eRadarChart = new Chart(this.eRadarCanvas.nativeElement, cfg);
+    this.renderChart('radar', this.eRadarCanvas, cfg);
   }
 
   private buildElecGauge(): void {
     if (!this.eGaugeCanvas) return;
-    this.eGaugeChart?.destroy();
     const cosfi  = Math.min(Math.max(this.avgCosfi, 0), 1);
     const remain = 1 - cosfi;
     const color  = cosfi >= 0.92 ? EP.green : cosfi >= 0.85 ? EP.cyan : EP.red;
-    this.eGaugeChart = new Chart(this.eGaugeCanvas.nativeElement, {
+    this.renderChart('gauge', this.eGaugeCanvas, {
       type: 'doughnut',
       data: {
         datasets: [{
@@ -551,11 +440,10 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private buildDailyChart(): void {
     if (!this.eDailyCanvas) return;
-    this.eDailyChart?.destroy();
 
     const pts = this.chartBars;
     const useSummaries = !pts.length && this.summaries.length > 0;
-    if (!pts.length && !useSummaries) return;
+    if (!pts.length && !useSummaries) { this.destroyChart('daily'); return; }
 
     const isStacked = pts.length > 0;
     const phaseColors = [
@@ -585,7 +473,7 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
       ? pts.map(b => b.label)
       : this.summaries.map(s => `Compteur #${s.idDevice}`);
 
-    this.eDailyChart = new Chart(this.eDailyCanvas.nativeElement, {
+    this.renderChart('daily', this.eDailyCanvas, {
       type: 'bar',
       data: { labels, datasets },
       options: {
@@ -653,41 +541,17 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
   // ══════════════════════════════════════════════════════════════
 
   openChartModal(type: ChartModalType): void {
-    this.chartModalType  = type;
-    this.chartModalTitle = type === 'evolution'
-      ? this.translate.instant('ENERGY.EVOLUTION') + ' — kWh'
-      : this.translate.instant('ENERGY.CO2_COST_PER_METER');
-    this.chartModalOpen = true;
-    document.addEventListener('keydown', this.onEscKey);
-    setTimeout(() => this.initModalChart(), 80);
+    this.chartModalType = type;
+    this.refreshLabels();
+    this.showChartModal();
   }
 
-  closeChartModal(): void {
-    this.chartModalOpen = false;
-    document.removeEventListener('keydown', this.onEscKey);
-    this.modalChart?.destroy();
-    this.modalChart = null;
-  }
-
-  handleChartModalBackdrop(e: MouseEvent): void {
-    if ((e.target as HTMLElement).classList.contains('elec-chart-modal-backdrop')) {
-      this.closeChartModal();
+  protected override buildModalChart(canvas: HTMLCanvasElement): void {
+    if (this.chartModalType === 'evolution') {
+      this.buildModalEvolution(canvas);
+    } else {
+      this.buildModalBar(canvas);
     }
-  }
-
-  private initModalChart(): void {
-    const canvas = this.modalChartCanvasRef?.nativeElement;
-    if (!canvas) return;
-    this.modalChart?.destroy();
-    this.modalChart = null;
-
-    this.zone.runOutsideAngular(() => {
-      if (this.chartModalType === 'evolution') {
-        this.buildModalEvolution(canvas);
-      } else {
-        this.buildModalBar(canvas);
-      }
-    });
   }
 
   private buildModalEvolution(canvas: HTMLCanvasElement): void {
@@ -701,7 +565,7 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
     gr.addColorStop(0.6, 'rgba(14,165,233,0.08)');
     gr.addColorStop(1,   'rgba(14,165,233,0.00)');
 
-    this.modalChart = new Chart(ctx, {
+    this.renderChart(MODAL_CHART, ctx, {
       type: 'line',
       data: {
         labels:   pts.map(p => p.label),
@@ -754,7 +618,7 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
   private buildModalBar(canvas: HTMLCanvasElement): void {
     if (!this.summaries.length) return;
 
-    this.modalChart = new Chart(canvas, {
+    this.renderChart(MODAL_CHART, canvas, {
       type: 'bar',
       data: {
         labels:   this.summaries.map(s => `Compteur #${s.idDevice}`),
@@ -820,17 +684,10 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
   // KPI DETAIL PANEL
   // ══════════════════════════════════════════════════════════════
 
-  openKpi(key: string):  void { this.selectedKpi = key; this.currentKpiDef = this.kpiDefs[key] ?? null; }
-  closeKpi():            void { this.selectedKpi = null; this.currentKpiDef = null; }
-
-  kpiDefs: Record<string, any> = {};
-  currentKpiDef: any = null;
-  dailyChartSub = '';
-
-  private _buildKpiDefs(): void {
+  private buildKpiDefs(): void {
     const t         = this.translate;
     const criticals = this.countBySeverity('CRITICAL');
-    this.kpiDefs = {
+    this.setKpiDefs({
       conso: {
         title: t.instant('ELEC.KPI_CONSUMPTION') + ' (kWh)',
         accent: '#0ea5e9', value: this.fmt(this.totalKwh, 1), unit: 'kWh',
@@ -910,8 +767,7 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
           badge: (s.avgThd ?? 0) <= 5 ? t.instant('ENERGY.THD_NOTE_OK') : t.instant('ENERGY.THD_NOTE_WARN')
         }))
       }
-    };
-    if (this.selectedKpi) this.currentKpiDef = this.kpiDefs[this.selectedKpi] ?? null;
+    });
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -946,9 +802,11 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
   statusClass(s: string): string {
     return s === 'OK' ? 'status-ok' : s === 'LOW_BATTERY' ? 'status-warn' : 'status-alert';
   }
+
   alertClass(s: string): string {
     return s === 'CRITICAL' ? 'sev-critical' : s === 'HIGH' ? 'sev-high' : 'sev-low';
   }
+
   alertIcon(type: string): string {
     const m: Record<string, string> = {
       HIGH_THD:    '⚡',
@@ -958,6 +816,7 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
     };
     return m[type] ?? '⚠';
   }
+
   recommendation(type: string): string {
     const m: Record<string, string> = {
       LOW_BATTERY: this.translate.instant('ELEC.REC_LOW_BATTERY'),
@@ -966,10 +825,6 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
       HIGH_CONSO:  this.translate.instant('ELEC.REC_HIGH_CONSO')
     };
     return m[type] ?? this.translate.instant('ELEC.REC_DEFAULT');
-  }
-
-  countBySeverity(sev: string): number {
-    return this.alerts.filter(a => a.severity === sev).length;
   }
 
   thdWidth(thd: number): string {
@@ -984,34 +839,4 @@ export class ElectricityComponent implements OnInit, OnDestroy, AfterViewInit {
   get chartTotalKwh():  string { return (this.chart?.totalConsKwh  ?? 0).toFixed(1); }
   get chartTotalCo2():  string { return (this.chart?.totalCo2Kg    ?? 0).toFixed(2); }
   get chartTotalCost(): string { return (this.chart?.totalCostTnd  ?? 0).toFixed(2); }
-
-  fmtAlertDate(d: string): string {
-    if (!d) return '—';
-    const dt = new Date(d);
-    const dd = String(dt.getDate()).padStart(2, '0');
-    const mm = String(dt.getMonth() + 1).padStart(2, '0');
-    const hh = String(dt.getHours()).padStart(2, '0');
-    const mn = String(dt.getMinutes()).padStart(2, '0');
-    return `${dd}/${mm} ${hh}:${mn}`;
-  }
-
-  fmt(n: number, dec = 0): string {
-    if (n == null || isNaN(n)) return '0';
-    return n.toLocaleString(this.locale, { minimumFractionDigits: dec, maximumFractionDigits: dec });
-  }
-
-  private get locale(): string {
-    const l = this.translate.currentLang ?? 'fr';
-    return l === 'ar' ? 'ar-TN' : l === 'en' ? 'en-US' : 'fr-FR';
-  }
-
-  private isTrendUp(t: string): boolean { return !t.startsWith('-'); }
-
-  private updateDateRange(from: Date, to: Date): void {
-    const o: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' };
-    this.dataRange = `${from.toLocaleDateString(this.locale, o)} → ${to.toLocaleDateString(this.locale, o)}`;
-  }
-
-  goBack():             void { this.router.navigate(['/dashboard']); }
-  navigateTo(p: string): void { this.router.navigate([p]); }
 }

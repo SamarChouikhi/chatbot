@@ -163,11 +163,33 @@ def load_population_data(config: WaterColdStartConfig) -> pd.DataFrame:
     pct_zero = df.groupby(config.item_col)[col].apply(lambda x: (x == 0).mean())
     too_offline = set(pct_zero[pct_zero >= config.max_pct_offline].index)
 
-    excluded = sorted(too_few | too_offline)
+    # Devices d'échelle incohérente avec le reste de la population (ex. compteur
+    # collectif mélangé avec des compteurs individuels) : la correction rollover
+    # est par-device (fenêtre sur ses propres quantiles) et ne peut pas détecter
+    # qu'un device entier est structurellement différent — un seul device de ce
+    # type peut dominer la moyenne/écart-type poolés utilisés pour le profil
+    # synthétique. On exclut tout device dont la moyenne active dépasse
+    # max_device_scale_ratio × la médiane des moyennes par device.
+    # La médiane de référence est calculée sur la population déjà nettoyée des
+    # devices too_few/too_offline : sinon un device peu fiable (mesures rares ou
+    # majoritairement à zéro) peut biaiser device_means/median_mean avant même
+    # d'être exclu, faussant le seuil d'échelle appliqué aux devices restants.
+    reliable_mask = ~df[config.item_col].isin(too_few | too_offline)
+    device_means = df[reliable_mask & (df[col] > 0)].groupby(config.item_col)[col].mean()
+    off_scale: set = set()
+    if len(device_means) >= 3:
+        median_mean = float(device_means.median())
+        if median_mean > 1e-9:
+            off_scale = set(
+                device_means[device_means > config.max_device_scale_ratio * median_mean].index
+            )
+
+    excluded = sorted(too_few | too_offline | off_scale)
     if excluded:
         _log.warning(
-            "Devices exclus de la population (%d) : %s",
-            len(excluded), excluded,
+            "Devices exclus de la population (%d) : %s"
+            " (trop peu de lignes / trop offline / échelle incohérente : %s)",
+            len(excluded), excluded, sorted(off_scale),
         )
         df = df[~df[config.item_col].isin(excluded)].copy()
 

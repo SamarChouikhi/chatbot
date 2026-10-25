@@ -227,7 +227,12 @@ class ChronosZeroShotDetector:
             if len(ctx_vals) < 2:
                 continue
 
-            context = torch.tensor(ctx_vals, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+            # Chronos-2 attend (n_series, n_variates, length) ; les modèles T5/Bolt
+            # chargés via BaseChronosPipeline attendent (batch, length).
+            is_chronos2 = type(self._pipeline).__name__ == "Chronos2Pipeline"
+            context = torch.tensor(ctx_vals, dtype=torch.float32).unsqueeze(0)
+            if is_chronos2:
+                context = context.unsqueeze(0)
 
             try:
                 quantiles, _ = self._pipeline.predict_quantiles(  # type: ignore[union-attr]
@@ -235,10 +240,11 @@ class ChronosZeroShotDetector:
                     prediction_length=pred_len,
                     quantile_levels=[self.q_low, 0.5, self.q_high],
                 )
-                q = quantiles[0][0].numpy()
+                # Chronos-2 : (1, 1, horizon, 3) ; T5/Bolt : (1, horizon, 3)
+                q = (quantiles[0][0] if is_chronos2 else quantiles[0]).numpy()
                 pred_low, pred_median, pred_high = q[:, 0], q[:, 1], q[:, 2]
             except Exception as exc:  # noqa: BLE001
-                _log.debug("[%s] window failed: %s", item_id, exc)
+                _log.warning("[%s] window failed: %r", item_id, exc)
                 continue
 
             # Widen interval by k_sigma × half_interval

@@ -85,6 +85,12 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run detection on synthetic data only (ignores --data)",
     )
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Override synthese.graine (random seed for synthetic data generation)",
+    )
     return p.parse_args()
 
 
@@ -112,6 +118,8 @@ def _run_energy(args: argparse.Namespace) -> None:
         config.output_dir = args.output
     if args.algo:
         config.algorithm = ColdStartAlgorithm(args.algo)
+    if args.seed is not None:
+        config.synthetic_seed = args.seed
 
     config._validate()
 
@@ -151,6 +159,8 @@ def _run_water(args: argparse.Namespace) -> None:
         config.output_dir = args.output
     if args.algo:
         config.algorithm = ColdStartAlgorithm(args.algo)
+    if args.seed is not None:
+        config.synthetic_seed = args.seed
 
     config._validate()
 
@@ -188,6 +198,8 @@ def _run_gaz(args: argparse.Namespace) -> None:
         config.output_dir = args.output
     if args.algo:
         config.algorithm = ColdStartAlgorithm(args.algo)
+    if args.seed is not None:
+        config.synthetic_seed = args.seed
 
     config._validate()
 
@@ -224,6 +236,8 @@ def _run_fuel(args: argparse.Namespace) -> None:
         config.output_dir = args.output
     if args.algo:
         config.algorithm = ColdStartAlgorithm(args.algo)
+    if args.seed is not None:
+        config.synthetic_seed = args.seed
 
     config._validate()
 

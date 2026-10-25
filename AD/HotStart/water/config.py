@@ -70,6 +70,7 @@ class WaterConfig:
     checkpoint_dir:     str   = "outputs/water/checkpoints"
     retrain_state_file: str   = "outputs/water/retrain_state.json"
 
+
     # ── Adaptive Calibration ──────────────────────────────────────────────
     # Phase 1 : apprend la distribution des erreurs sur une période "normale"
     # Phase 2 : seuil = profil.p99 × calibration_threshold_factor

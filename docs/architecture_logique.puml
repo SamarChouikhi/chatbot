@@ -1,0 +1,85 @@
+@startuml Architecture_Logique_ARIA
+
+' =========================================================================
+'  ARIA - Architecture Logique
+'  Rapport PFE - Version finale
+' =========================================================================
+
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.4
+skinparam padding 6
+skinparam nodeStyle rectangle
+
+skinparam package {
+    BackgroundColor #FFFFFF
+    BorderColor #37474F
+    FontStyle bold
+    FontSize 14
+}
+
+skinparam rectangle {
+    BackgroundColor #E8F0FE
+    BorderColor #4A78C4
+    FontStyle bold
+}
+
+skinparam database {
+    BackgroundColor #FFF3E0
+    BorderColor #E65100
+    FontStyle bold
+}
+
+skinparam actor {
+    BackgroundColor #ECEFF1
+    BorderColor #455A64
+}
+
+title <b>ARIA - Architecture Logique</b>
+
+actor "Utilisateur" as User
+
+package "Couche Presentation" as L1 {
+    rectangle "Interface Web\n(dashboards, alertes, chatbot)" as UI
+}
+
+package "Couche Metier" as L2 {
+    rectangle "Gestion Utilisateurs\net Securite" as UserMgmt
+    rectangle "Gestion des Capteurs\net Alertes" as SensorMgmt
+    rectangle "Agent Conversationnel\n(comprehension, reponse)" as Agent
+    rectangle "Detection d'Anomalies\net Recommandations" as ADMod
+}
+
+package "Couche Acces aux Donnees" as L3 {
+    rectangle "Services de Requetes\net d'Agregation" as DataAccess
+}
+
+package "Couche Donnees" as L4 {
+    database "Base de Donnees\n(consommations, historique,\nresultats IA)" as DB
+}
+
+package "Couche Integration Externe" as L5 {
+    rectangle "Modeles de Langage (IA)\net Notifications" as ExtServices
+}
+
+User --> UI
+
+UI --> UserMgmt
+UI --> SensorMgmt
+UI --> Agent
+
+Agent --> ADMod
+Agent --> ExtServices
+
+UserMgmt --> DataAccess
+SensorMgmt --> DataAccess
+Agent --> DataAccess
+ADMod --> DataAccess
+
+DataAccess --> DB
+
+@enduml

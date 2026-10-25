@@ -98,8 +98,10 @@ synthese:
   graine: 42
 
   # Facteur de bruit : 0 = pattern pur, 1 = bruit plein σ
-  # Eau : 0.9 car consommation eau très variable (différents usages)
-  facteur_bruit: 0.9
+  # Réduit de 0.9 → 0.6 (aligné sur fuel) : à 0.9 la queue lourde du log-normal
+  # générait des tirages "normaux" à 4-7× la moyenne, flaggés par zscore/iqr
+  # sans être de vraies anomalies injectées (mesuré via eval/coldstart_calibration.py)
+  facteur_bruit: 0.6
 
   # Fraction de pics anormaux injectés (fuites, ruptures de conduite)
   taux_anomalies_synthetiques: 0.02

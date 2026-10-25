@@ -1,0 +1,97 @@
+%***********************************
+% CORRECTIONS - section 2.5 "Conception du systeme"
+% A substituer aux sous-sections correspondantes du chapitre existant.
+% Les blocs \includegraphics restent inchanges ; seul le texte descriptif
+% est aligne sur le contenu reel des .puml produits.
+%***********************************
+
+%***********************************
+\subsection{Architecture physique}
+\label{subsec:archi_physique}
+%***********************************
+
+La première vue décrit la répartition des composants sur les machines physiques ou virtuelles qui les hébergent. Comme le montre la figure~\ref{fig:archi_physique}, le poste client se limite au navigateur exécutant l'application Angular ; il communique en HTTPS avec un serveur web frontal (Nginx), qui sert le build statique et fait office de reverse proxy vers le serveur applicatif. Ce dernier héberge conjointement le backend transactionnel Quarkus, l'orchestrateur FastAPI d'ARIA et le serveur MCP. Le serveur applicatif s'appuie à son tour sur un serveur dédié au module de détection d'anomalies et sur un serveur de base de données MySQL, seul point de persistance partagé. Les appels vers les fournisseurs de modèles de langage et le service de transcription vocale sortent du périmètre interne vers des API externes accessibles par clé.
+
+\begin{figure}[p]
+    \centering
+    \includegraphics[
+        width=\textwidth,
+        height=\textheight,
+        keepaspectratio
+    ]{Images/chap2/architecture_physique.png}
+    \caption{Architecture physique de la plateforme}
+    \label{fig:archi_physique}
+\end{figure}
+
+%***********************************
+\subsection{Architecture logique globale}
+\label{subsec:archi_logique}
+%***********************************
+
+Indépendamment de son déploiement, la solution s'organise en couches définies par la nature des responsabilités qu'elles portent, et non par la technologie qui les implémente. La figure~\ref{fig:archi_logique_globale} distingue ainsi une couche de présentation, une couche métier qui regroupe la gestion des utilisateurs et de la sécurité, la gestion des capteurs et des alertes, l'agent conversationnel et le module de détection d'anomalies et de recommandations, une couche d'accès aux données qui centralise les requêtes et l'agrégation, une couche de données, et une couche d'intégration externe pour les modèles de langage et les notifications. Ce découpage par responsabilité permet de faire évoluer ou de remplacer l'implémentation d'une couche sans affecter les autres.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=\textwidth,
+        keepaspectratio
+    ]{Images/chap2/architecture_logique_globale.png}
+    \caption{Architecture logique globale}
+    \label{fig:archi_logique_globale}
+\end{figure}
+
+%***********************************
+\subsection{Diagramme de cas d'utilisation}
+\label{subsec:cas_utilisation}
+%***********************************
+
+Le diagramme de cas d'utilisation recense les acteurs de la solution ainsi que les fonctionnalités accessibles à chacun d'eux. La figure~\ref{fig:cas_utilisation} distingue deux profils. L'\textit{Utilisateur} s'authentifie, consulte les dashboards par domaine (énergie, eau, gaz, carburant), consulte les alertes, interroge l'assistant conversationnel, consulte les recommandations, génère et exporte des rapports, reçoit des notifications proactives et peut donner un avis sur une réponse ; l'envoi d'une image ou d'un message vocal étend le cas d'interrogation du chatbot. L'\textit{Administrateur} hérite de l'ensemble de ces cas et y ajoute la gestion des utilisateurs et des permissions, l'import de données, la configuration des seuils de détection et la consultation du journal d'exécution des traitements planifiés. Les relations d'inclusion ne sont posées que là où elles sont structurantes : l'authentification est un préalable à la consultation des dashboards, à l'usage du chatbot et à la gestion des utilisateurs.
+
+\begin{sidewaysfigure}[p]
+    \centering
+    \includegraphics[
+        width=\textheight,
+        height=\textwidth,
+        keepaspectratio
+    ]{Images/chap2/cas_utilisation.png}
+    \caption{Diagramme de cas d'utilisation global}
+    \label{fig:cas_utilisation}
+\end{sidewaysfigure}
+
+La description fine des rôles applicatifs et des permissions qui leur sont rattachées figure dans le chapitre consacré à la réalisation.
+
+%***********************************
+\subsection{Diagramme de séquence}
+\label{subsec:sequences}
+%***********************************
+
+Le cas d'utilisation le plus représentatif de la valeur ajoutée de la plateforme — l'interrogation de l'assistant conversationnel — fait l'objet d'un diagramme de séquence dédié, présenté en figure~\ref{fig:sequence_chatbot}. Une intention courante (salutation, demande d'aide) est reconnue immédiatement et traitée sans appel au modèle de langage. Pour une question portant sur les données, la requête est analysée, puis les outils MCP nécessaires sont invoqués pour interroger la base ; les résultats sont transmis au modèle de langage qui formule une réponse. Cette réponse est ensuite évaluée automatiquement, et une unique relance de génération est déclenchée si le score de qualité est jugé insuffisant, avant diffusion progressive vers l'interface. Ce diagramme couvre exclusivement le flux conversationnel ; l'exécution planifiée de la détection d'anomalies, indépendante de ce flux, est décrite séparément dans le chapitre qui lui est consacré.
+
+\begin{figure}[p]
+    \centering
+    \includegraphics[
+        width=\textwidth,
+        height=\textheight,
+        keepaspectratio
+    ]{Images/chap2/sequence_chatbot.png}
+    \caption{Diagramme de séquence — interrogation de l'assistant conversationnel}
+    \label{fig:sequence_chatbot}
+\end{figure}
+
+%***********************************
+\subsection{Diagramme de classes}
+\label{subsec:diagramme_classes}
+%***********************************
+
+Plutôt qu'une reproduction exhaustive des tables physiques de la base \texttt{bw\_samar} — dont certaines, comme les mesures électriques brutes, comptent plus d'une centaine de colonnes techniques — le diagramme retenu en propose une lecture conceptuelle, organisée en cinq familles cohérentes avec les couches de l'architecture logique. La figure~\ref{fig:diagramme_classes} distingue ainsi les entités d'organisation et de sécurité (espaces, équipements, utilisateurs, rôles et permissions), les mesures et alertes remontées par les équipements, les agrégats horaires produits par le pipeline planifié, les résultats de la détection d'anomalies et de la génération de recommandations, et enfin les entités propres à l'assistant conversationnel (fils de discussion, messages, retours utilisateurs). Les associations traduisent les dépendances effectives entre ces entités, notamment le rattachement systématique des mesures, alertes et résultats d'analyse à un équipement.
+
+\begin{sidewaysfigure}[p]
+    \centering
+    \includegraphics[
+        width=\textheight,
+        height=\textwidth,
+        keepaspectratio
+    ]{Images/chap2/diagramme_classes.png}
+    \caption{Diagramme de classes — modèle conceptuel de la base bw\_samar}
+    \label{fig:diagramme_classes}
+\end{sidewaysfigure}

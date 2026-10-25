@@ -73,6 +73,7 @@ class EnergyConfig:
     checkpoint_dir:     str   = "outputs/energy/checkpoints"
     retrain_state_file: str   = "outputs/energy/retrain_state.json"
 
+
     # ── Derived ───────────────────────────────────────────────────────────
 
     @property

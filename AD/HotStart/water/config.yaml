@@ -117,6 +117,7 @@ retraining:
   fichier_etat: "outputs/water/retrain_state.json"
 
 
+
 # ── Calibration adaptative ────────────────────────────────────────────────────
 #
 #  Phase 1 — Calibration (hot start)

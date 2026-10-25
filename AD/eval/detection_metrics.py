@@ -78,6 +78,11 @@ def generate_multianomaly_dataset(
     signal = pop_mean + daily + weekly + noise
     signal = np.clip(signal, 0.0, pop_mean + 4 * pop_std)
 
+    # anomaly_rate=0 → série propre (sert de contexte d'amorçage à Chronos)
+    if anomaly_rate <= 0:
+        return LabeledDataset(values=signal, labels=np.zeros(n_hours, dtype=bool),
+                              anom_type=np.full(n_hours, "", dtype=object), timestamps=ts)
+
     n_total = max(3, int(n_hours * anomaly_rate))
     n_each  = max(1, n_total // 3)
 
@@ -169,6 +174,36 @@ def detect_isolation_forest(values, timestamps, seed=42):
     return is_anom, score
 
 
+_CHRONOS_DETECTOR = None
+
+
+def detect_chronos(values, timestamps, seed_ds: LabeledDataset):
+    """
+    Chronos-T5 Tiny zero-shot — même classe et mêmes paramètres que le ColdStart
+    de production (cf. ColdStart/fuel/config.yaml). Le contexte d'amorçage est une
+    série propre issue du même générateur, comme la série synthétique en production.
+    """
+    global _CHRONOS_DETECTOR
+    if _CHRONOS_DETECTOR is None:
+        from pathlib import Path
+        coldstart_dir = str(Path(__file__).resolve().parents[1] / "ColdStart")
+        if coldstart_dir not in sys.path:
+            sys.path.insert(0, coldstart_dir)
+        from common.chronos_detector import ChronosZeroShotDetector  # noqa: PLC0415
+        _CHRONOS_DETECTOR = ChronosZeroShotDetector(
+            model_name="autogluon/chronos-t5-tiny", device="cpu",
+            context_length=72, prediction_length=12, num_samples=20,
+            q_low=0.1, q_high=0.9, k_sigma=1.5,
+        )
+
+    det = _CHRONOS_DETECTOR
+    det.fit(pd.DataFrame({"item_id": "eval", "ts": seed_ds.timestamps, "v": seed_ds.values}),
+            "v", "ts")
+    group = pd.DataFrame({"ts": timestamps, "v": values})
+    is_anom, score, _, _ = det.detect(group, "v", "ts", "eval")
+    return is_anom, score
+
+
 def detect_ensemble(results, min_votes=2):
     vote_matrix  = np.column_stack([r[0].astype(int) for r in results])
     votes        = vote_matrix.sum(axis=1)
@@ -219,13 +254,19 @@ def metrics_by_type(
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 
-def run_evaluation(n_devices: int = 3, n_seeds: int = 3, anomaly_rate: float = 0.05) -> None:
+def run_evaluation(
+    n_devices: int = 3, n_seeds: int = 3, anomaly_rate: float = 0.05,
+    with_chronos: bool = False,
+) -> None:
     POP_MEAN = 52.3
     POP_STD  = 18.7
     POP_Q25  = 38.1
     POP_Q75  = 65.4
 
-    algo_names = ["Z-Score", "IQR", "Isolation Forest", "Ensemble (vote≥2)"]
+    algo_names = ["Z-Score", "IQR", "Isolation Forest"]
+    if with_chronos:
+        algo_names.append("Chronos-T5 Tiny")
+    algo_names.append("Ensemble (vote≥2)")
     cumul: dict[str, dict[str, list]] = {
         n: {"p": [], "r": [], "f1": [], "auc": [], "delay": []} for n in algo_names
     }
@@ -245,11 +286,16 @@ def run_evaluation(n_devices: int = 3, n_seeds: int = 3, anomaly_rate: float = 0
             r_z   = detect_zscore(ds.values, POP_MEAN, POP_STD)
             r_iqr = detect_iqr(ds.values, POP_Q25, POP_Q75)
             r_if  = detect_isolation_forest(ds.values, ds.timestamps, seed=seed)
-            r_ens = detect_ensemble([r_z, r_iqr, r_if])
+            voters = [r_z, r_iqr, r_if]
+            if with_chronos:
+                seed_ds = generate_multianomaly_dataset(
+                    n_hours=720, anomaly_rate=0.0,
+                    pop_mean=POP_MEAN, pop_std=POP_STD, seed=seed + 500,
+                )
+                voters.append(detect_chronos(ds.values, ds.timestamps, seed_ds))
+            r_ens = detect_ensemble(voters)
 
-            for name, (is_anom, score) in zip(
-                algo_names, [r_z, r_iqr, r_if, r_ens]
-            ):
+            for name, (is_anom, score) in zip(algo_names, [*voters, r_ens]):
                 c = cumul[name]
                 c["p"].append(float(precision_score(ds.labels, is_anom, zero_division=0)))
                 c["r"].append(float(recall_score(ds.labels, is_anom, zero_division=0)))
@@ -354,8 +400,9 @@ def run_evaluation(n_devices: int = 3, n_seeds: int = 3, anomaly_rate: float = 0
         print("    à travers les 3 types d'anomalies sans nécessiter de tuning par type.")
     else:
         print(f"    L'ensemble ne domine pas {best_overall} sur ce dataset.")
-        print("    Piste d'amélioration : vote pondéré (poids IF plus élevé pour pics isolés,")
-        print("    poids Z-Score/IQR plus élevés pour anomalies contextuelles et collectives).")
+        # Pondération dérivée des meilleurs F1 par type — jamais codée en dur
+        print(f"    Piste d'amélioration : vote pondéré (poids {best_point} plus élevé pour pics isolés,")
+        print(f"    poids {best_contextual} pour contextuelles, {best_collective} pour collectives).")
 
     print("=" * W)
     print()
@@ -369,6 +416,8 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--n-devices",    type=int,   default=3,    help="Devices simulés (défaut: 3)")
     p.add_argument("--seeds",        type=int,   default=3,    help="Seeds/device (défaut: 3)")
     p.add_argument("--anomaly-rate", type=float, default=0.05, help="Taux anomalies (défaut: 0.05)")
+    p.add_argument("--with-chronos", action="store_true",
+                   help="Ajoute Chronos-T5 Tiny zero-shot comme 4e votant (comme en production)")
     return p.parse_args()
 
 
@@ -378,4 +427,5 @@ if __name__ == "__main__":
         n_devices=args.n_devices,
         n_seeds=args.seeds,
         anomaly_rate=args.anomaly_rate,
+        with_chronos=args.with_chronos,
     )

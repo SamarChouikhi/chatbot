@@ -10,6 +10,24 @@ from mcp_server.tools._helpers import ok, err
 
 logger = logging.getLogger('aria.tools.reco')
 
+# Le LLM passe souvent le nom du domaine dans la langue de l'utilisateur ("gaz", "eau",
+# "électricité"…) alors que aria_recommendations.domain stocke energy|water|gas|fuel.
+# Sans normalisation, la requête renvoie 0 ligne et ARIA affirme à tort qu'il n'y a rien.
+_DOMAIN_ALIASES = {
+    'energy': ('energy', 'energie', 'énergie', 'electricite', 'électricité', 'electricity',
+               'electrique', 'électrique', 'énergie électrique', 'en', 'kwh', 'طاقة', 'كهرباء'),
+    'water' : ('water', 'eau', 'wm', 'ماء', 'مياه'),
+    'gas'   : ('gas', 'gaz', 'gm', 'غاز'),
+    'fuel'  : ('fuel', 'carburant', 'gasoil', 'diesel', 'essence', 'flotte', 'وقود'),
+    'all'   : ('all', 'tous', 'toutes', 'tout', '*', ''),
+}
+_DOMAIN_LOOKUP = {alias: canon for canon, aliases in _DOMAIN_ALIASES.items() for alias in aliases}
+
+
+def _normalize_domain(domain: str | None) -> str | None:
+    """Retourne le domaine canonique, ou None si inconnu."""
+    return _DOMAIN_LOOKUP.get((domain or '').strip().lower())
+
 
 def get_recommendations(domain: str = 'all', limit: int = 10, device_id: str = '') -> str:
     """
@@ -36,6 +54,12 @@ def get_recommendations(domain: str = 'all', limit: int = 10, device_id: str = '
     """
     tool = 'get_recommendations'
     logger.info('[%s] domain=%s device_id=%s limit=%d', tool, domain, device_id or 'all', limit)
+
+    canonical = _normalize_domain(domain)
+    if canonical is None:
+        return err(tool, f"Domaine inconnu : '{domain}'",
+                   'Valeurs acceptées : energy | water | gas | fuel | all')
+    domain = canonical
 
     try:
         from mcp_server.db.connection import engine

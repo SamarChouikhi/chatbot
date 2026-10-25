@@ -33,7 +33,7 @@ class ChronosDetector(ABC):
         q_high:            float = 0.9,
     ) -> None:
         self.model_name        = model_name
-        self.device            = device
+        self.device            = self._resolve_device(device)
         self.context_length    = context_length
         self.prediction_length = prediction_length
         self.num_samples       = num_samples
@@ -45,6 +45,17 @@ class ChronosDetector(ABC):
         self.q_low  = q_low
         self.q_high = q_high
         self._pipeline = None
+
+    @staticmethod
+    def _resolve_device(device: str) -> str:
+        """Retombe sur 'cpu' si le device demandé (config) n'est pas disponible sur cette machine."""
+        if device == "cuda" and not torch.cuda.is_available():
+            _log.warning("device='cuda' demandé mais indisponible sur cette machine — fallback 'cpu'")
+            return "cpu"
+        if device == "mps" and not (hasattr(torch.backends, "mps") and torch.backends.mps.is_available()):
+            _log.warning("device='mps' demandé mais indisponible sur cette machine — fallback 'cpu'")
+            return "cpu"
+        return device
 
     # ── Model lifecycle ───────────────────────────────────────────────────
 

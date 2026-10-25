@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Union
 
 from common.logger import get_logger
-from common.monthly_retrainer import MonthlyRetrainer
+from common.monthly_retrainer import MonthlyRetrainer, RetrainOutcome
 from .config import WaterConfig
 from .detector import WaterAnomalyDetector
 from .preprocessor import clean_water_data, load_water_data, resample_water
@@ -73,8 +73,12 @@ def run_retrain(
     detector._load_pipeline()
 
     # ── Retraining per device ─────────────────────────────────────────────
-    retrainer = MonthlyRetrainer(config)
+    # Chaque device est fine-tuné à partir des poids de base : sans restauration,
+    # le device N partirait des poids déjà ajustés sur les devices 1..N-1.
+    retrainer    = MonthlyRetrainer(config)
+    base_weights = retrainer.snapshot_base_weights(detector._pipeline)
     retrained:      dict[str, int] = {}
+    failed:         list[str]      = []
     skipped_same:   list[str]      = []
     skipped_mature: list[str]      = []
 
@@ -87,8 +91,12 @@ def run_retrain(
             continue
 
         if retrainer.should_retrain(dev_str, device_df):
-            retrainer.retrain(dev_str, device_df, detector._pipeline)
-            retrained[dev_str] = retrainer.months_accumulated(dev_str)
+            outcome = retrainer.retrain(dev_str, device_df, detector._pipeline)
+            retrainer.restore_base_weights(detector._pipeline, base_weights)
+            if outcome is RetrainOutcome.ADOPTED:
+                retrained[dev_str] = retrainer.months_accumulated(dev_str)
+            else:
+                failed.append(dev_str)
         else:
             skipped_same.append(dev_str)
 
@@ -106,6 +114,11 @@ def run_retrain(
     else:
         _log.info("  Retraînés  : aucun nouveau mois détecté")
 
+    if failed:
+        _log.warning(
+            "  Échecs fine-tune : %d device(s) — état NON avancé, retenté au prochain run — %s",
+            len(failed), failed,
+        )
     if skipped_mature:
         _log.info("  Matures    : %d device(s) — %s", len(skipped_mature), skipped_mature)
     if skipped_same:

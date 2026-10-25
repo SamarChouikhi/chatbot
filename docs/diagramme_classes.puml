@@ -1,0 +1,211 @@
+@startuml Diagramme_Classes_ARIA
+
+' =========================================================================
+'  ARIA - Diagramme de Classes (modele conceptuel de la base bw_samar)
+'  Rapport PFE - Version finale
+' =========================================================================
+
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 12
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.2
+skinparam classAttributeIconSize 0
+
+skinparam class {
+    BackgroundColor #E8F0FE
+    BorderColor #4A78C4
+    FontStyle bold
+    ArrowColor #37474F
+}
+
+skinparam package {
+    BackgroundColor #FFFFFF
+    BorderColor #90A4AE
+    FontStyle bold
+}
+
+title <b>ARIA - Diagramme de Classes</b>\n<size:11>Modele conceptuel simplifie de la base bw_samar</size>
+
+package "Organisation et Securite" {
+
+    class Espace {
+        id : int
+        nom : string
+        type : int
+        etat : int
+    }
+
+    class Device {
+        id : int
+        adresse : int
+        nom : string
+        type : int
+        maxUptime : int
+        isGeneralMeter : bool
+        lastSavedIndex : double
+    }
+
+    class UUser {
+        login : string
+        pwd : string
+        phone : string
+        isAdvisor : bool
+    }
+
+    class UserRole {
+        id : int
+        userName : string
+    }
+
+    class Permission {
+        id : int
+        permission : string
+    }
+}
+
+package "Mesures et Alertes" {
+
+    class Mesure {
+        idDevice : int
+        date : datetime
+        valeurs : double[]
+        .. energie / eau / gaz / carburant ..
+        .. granularite temps reel, horaire, ..
+        .. journaliere, mensuelle ..
+    }
+
+    class Alert {
+        date : datetime
+        idDevice : int
+        type : string
+        valeur : double
+        valMin : double
+        valMax : double
+        message : string
+    }
+}
+
+package "Agregation et Pipeline" {
+
+    class ConsommationHoraire {
+        deviceId : string
+        domain : string
+        date : date
+        hour : int
+        valeur : double
+        nbMesures : int
+    }
+
+    class PipelineRun {
+        startedAt : datetime
+        endedAt : datetime
+        status : string
+        summary : json
+    }
+}
+
+package "Detection d'Anomalies et IA" {
+
+    class AdResult {
+        runAt : datetime
+        domain : string
+        itemId : string
+        isAnomaly : bool
+        anomalyScore : double
+        value : double
+        q10 : double
+        q90 : double
+    }
+
+    class Prediction {
+        runAt : datetime
+        domain : string
+        itemId : string
+        forecastTs : datetime
+        forecastMedian : double
+        confidence : double
+        isAlert : bool
+    }
+
+    class DeviceBaseline {
+        deviceId : string
+        domain : string
+        hourOfWeek : int
+        p10 : double
+        p50 : double
+        p90 : double
+    }
+
+    class Recommendation {
+        domain : string
+        deviceId : string
+        recType : string
+        priority : string
+        title : string
+        description : string
+        estimatedSavingTnd : double
+        status : string
+    }
+}
+
+package "Assistant Conversationnel" {
+
+    class AriaEmployee {
+        userId : string
+        name : string
+        allowedModules : json
+        isAdmin : bool
+    }
+
+    class ChatThread {
+        threadId : string
+        userId : string
+        title : string
+        messageCount : int
+    }
+
+    class ChatMessage {
+        threadId : string
+        role : string
+        content : text
+        backend : string
+        duration : float
+    }
+
+    class ChatFeedback {
+        messageId : int
+        userId : string
+        vote : string
+        comment : text
+    }
+}
+
+' ---------------------------------------------------------------------
+' Relations
+' ---------------------------------------------------------------------
+
+Espace "1" -- "*" Device : contient
+
+UUser "*" -- "1" UserRole : possede
+UserRole "*" -- "*" Permission : accorde
+
+Device "1" -- "*" Mesure : produit
+Device "1" -- "*" Alert : declenche
+Device "1" -- "*" ConsommationHoraire : agrege en
+
+ConsommationHoraire "*" -- "1" PipelineRun : genere par
+
+Device "1" -- "*" AdResult : analyse dans
+Device "1" -- "*" Prediction : previsions pour
+Device "1" -- "*" DeviceBaseline : profil de reference
+Device "0..1" -- "*" Recommendation : cible par
+
+UUser "1" -- "0..1" AriaEmployee : profil applicatif
+AriaEmployee "1" -- "*" ChatThread : possede
+
+ChatThread "1" *-- "*" ChatMessage : contient
+ChatMessage "1" -- "0..1" ChatFeedback : evalue par
+
+@enduml

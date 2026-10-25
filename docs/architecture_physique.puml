@@ -1,0 +1,92 @@
+@startuml Architecture_Physique_ARIA
+
+' =========================================================================
+'  ARIA - Architecture Physique / Deploiement
+'  Rapport PFE - Version finale
+' =========================================================================
+
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundcorner 6
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.4
+skinparam padding 6
+skinparam nodeStyle rectangle
+
+skinparam rectangle {
+    BackgroundColor #ECEFF1
+    BorderColor #37474F
+    FontStyle bold
+}
+
+skinparam database {
+    BackgroundColor #FFF3E0
+    BorderColor #E65100
+    FontStyle bold
+}
+
+skinparam frame {
+    BackgroundColor #F3E5F5
+    BorderColor #7B1FA2
+    FontStyle bold
+}
+
+skinparam artifact {
+    BackgroundColor #E8F0FE
+    BorderColor #4A78C4
+}
+
+skinparam actor {
+    BackgroundColor #ECEFF1
+    BorderColor #455A64
+}
+
+title <b>ARIA - Architecture Physique de Deploiement</b>
+
+actor "Utilisateur" as User
+
+rectangle "Poste Client" as ClientNode {
+    artifact "Navigateur Web\n(SPA Angular)" as Browser
+}
+
+rectangle "Serveur Web / Frontend" as WebServer {
+    artifact "Nginx\n(build Angular statique,\nreverse proxy, TLS)" as Nginx
+}
+
+rectangle "Serveur Applicatif Backend" as AppServer {
+    artifact "Quarkus\n(API metier, auth JWT,\nalertes temps reel)" as JavaApp
+    artifact "FastAPI\n(agent conversationnel,\norchestration IA)" as PyApp
+    artifact "Serveur MCP\n(outils de donnees)" as MCPApp
+}
+
+rectangle "Serveur IA / ML" as MLServer {
+    artifact "Module de Detection\nd'Anomalies (Chronos)" as ADApp
+}
+
+rectangle "Serveur Base de Donnees" as DBServer {
+    database "MySQL\n(bw_samar)" as MySQL
+}
+
+frame "APIs Externes\n(acces par cle API)" as ExtCloud {
+    artifact "Fournisseurs LLM\n(Groq, Gemini, Cerebras, ...)" as LLM
+    artifact "Transcription Vocale\n(AssemblyAI)" as Voice
+}
+
+User --> Browser : HTTPS
+Browser --> Nginx : requetes web
+
+Nginx --> JavaApp : REST / SSE
+Nginx --> PyApp : REST / SSE
+
+JavaApp --> DBServer : JDBC
+PyApp --> MCPApp : appels outils
+PyApp --> DBServer : SQL
+MCPApp --> DBServer : SQL (lecture)
+
+PyApp --> ExtCloud : appels API
+ADApp --> DBServer : ecriture resultats
+PyApp ..> ADApp : declenchement\n(pipeline planifie)
+
+@enduml

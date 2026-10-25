@@ -19,26 +19,38 @@ public class AuthService {
     @Inject
     JwtService jwtService;
 
+    /**
+     * Le constructeur NotAuthorizedException(Object) interprète son argument comme un
+     * challenge WWW-Authenticate : getMessage() renverrait alors "HTTP 401 Unauthorized".
+     */
+    private static NotAuthorizedException unauthorized(String message) {
+        return new NotAuthorizedException(message, "Bearer");
+    }
+
     @Transactional
     public AuthResponse login(LoginRequest request) {
-        // 1. Chercher par login
-        UUser user = UUser.findByLogin(request.login)
-                .orElseThrow(() -> new NotAuthorizedException("Login ou mot de passe incorrect"));
+        // 1. Chercher par login — trim : un espace collé/autocomplété ne doit pas rendre le compte introuvable
+        String login = request.login == null ? "" : request.login.trim();
+        UUser user = UUser.findByLogin(login).orElseThrow(() -> {
+            LOG.warnf("Login échoué : utilisateur inconnu '%s'", login);
+            return unauthorized("Login ou mot de passe incorrect");
+        });
 
         // 2. Vérifier blocage
         if (user.isBlocked()) {
-            throw new NotAuthorizedException("Compte temporairement bloqué. Réessayez plus tard.");
+            throw unauthorized("Compte temporairement bloqué. Réessayez plus tard.");
         }
 
         // 3. Vérifier mot de passe
         if (!user.checkPassword(request.password)) {
+            LOG.warnf("Login échoué : mot de passe incorrect pour '%s'", user.login);
             recordFailedAttempt(user.login);
-            throw new NotAuthorizedException("Login ou mot de passe incorrect");
+            throw unauthorized("Login ou mot de passe incorrect");
         }
 
         // 4. Vérifier expiration — pwdExpDate est déjà LocalDate, pas besoin de .toLocalDate()
         if (user.pwdExpDate != null && user.pwdExpDate.isBefore(LocalDate.now())) {
-            throw new NotAuthorizedException("Mot de passe expiré");
+            throw unauthorized("Mot de passe expiré");
         }
 
         // 5. Réinitialiser les tentatives en cas de succès
@@ -59,13 +71,13 @@ public class AuthService {
             org.eclipse.microprofile.jwt.JsonWebToken jwt = jwtParser.parse(refreshTokenStr);
             String type = jwt.getClaim("type");
             if (!"refresh".equals(type)) {
-                throw new NotAuthorizedException("Token invalide");
+                throw unauthorized("Token invalide");
             }
             String login = jwt.getSubject();
             UUser user = UUser.findByLogin(login)
-                    .orElseThrow(() -> new NotAuthorizedException("Utilisateur introuvable"));
+                    .orElseThrow(() -> unauthorized("Utilisateur introuvable"));
             if (user.isBlocked()) {
-                throw new NotAuthorizedException("Compte bloqué");
+                throw unauthorized("Compte bloqué");
             }
             String newAccess  = jwtService.generateAccessToken(user);
             String newRefresh = jwtService.generateRefreshToken(user);
@@ -74,7 +86,7 @@ public class AuthService {
             throw e;
         } catch (Exception e) {
             LOG.error("Erreur refresh token", e);
-            throw new NotAuthorizedException("Refresh token invalide ou expiré");
+            throw unauthorized("Refresh token invalide ou expiré");
         }
     }
 

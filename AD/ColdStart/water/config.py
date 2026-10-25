@@ -65,6 +65,12 @@ class WaterColdStartConfig:
     min_device_rows:      int   = 48
     max_pct_offline:      float = 0.90
     rollover_iqr_factor:  float = 30.0
+    # Exclut les devices dont la moyenne (valeurs actives) dépasse ce multiple
+    # de la médiane inter-devices — la correction rollover est par-device
+    # (fenêtre sur ses propres quantiles) et ne peut pas détecter qu'un device
+    # entier est d'une échelle incohérente avec le reste de la population
+    # (ex. compteur collectif vs individuels, mauvaise unité).
+    max_device_scale_ratio: float = 10.0
 
     # ── Synthetic generation ──────────────────────────────────────────────
     synthetic_days:         int        = 30
@@ -174,6 +180,7 @@ class WaterColdStartConfig:
             min_device_rows       = int(prf.get("min_lignes_device",           defaults.min_device_rows)),
             max_pct_offline       = float(prf.get("max_pct_offline",           defaults.max_pct_offline)),
             rollover_iqr_factor   = float(prf.get("facteur_rollover",          defaults.rollover_iqr_factor)),
+            max_device_scale_ratio = float(prf.get("max_ratio_echelle_device", defaults.max_device_scale_ratio)),
             synthetic_days        = int(syn.get("jours",                       defaults.synthetic_days)),
             synthetic_seed        = seed,
             synthetic_noise_factor= float(syn.get("facteur_bruit",             defaults.synthetic_noise_factor)),
@@ -212,6 +219,8 @@ class WaterColdStartConfig:
             errors.append(f"max_pct_offline ({self.max_pct_offline}) doit être dans ]0, 1]")
         if self.rollover_iqr_factor <= 0:
             errors.append("facteur_rollover doit être > 0")
+        if self.max_device_scale_ratio <= 1.0:
+            errors.append("max_ratio_echelle_device doit être > 1.0")
 
         if errors:
             raise ValueError(

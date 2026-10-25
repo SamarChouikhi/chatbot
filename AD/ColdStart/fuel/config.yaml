@@ -45,7 +45,7 @@ algorithmes:
 # ── Chronos zero-shot (FPT) ───────────────────────────────────────────────────
 chronos:
   modele: "autogluon/chronos-t5-tiny"
-  accelerateur: "cuda"
+  accelerateur: "cpu"
   contexte: 72
   horizon: 12
   num_samples: 20

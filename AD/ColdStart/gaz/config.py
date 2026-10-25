@@ -47,6 +47,16 @@ class GazColdStartConfig:
     if_n_estimators:  int   = 100
     if_max_samples:   int   = 256
 
+    # Surcharges par colonne (voir fuel/config.py pour la justification)
+    zscore_threshold_by_col: dict[str, float] = field(default_factory=dict)
+    iqr_multiplier_by_col:   dict[str, float] = field(default_factory=dict)
+
+    def zscore_threshold_for(self, col: str) -> float:
+        return self.zscore_threshold_by_col.get(col, self.zscore_threshold)
+
+    def iqr_multiplier_for(self, col: str) -> float:
+        return self.iqr_multiplier_by_col.get(col, self.iqr_multiplier)
+
     # Chronos zero-shot
     chronos_model:             str   = "autogluon/chronos-t5-tiny"
     chronos_device:            str   = "cpu"
@@ -149,6 +159,8 @@ class GazColdStartConfig:
             min_votes                 = int(alg.get("min_votes_anomalie",       defaults.min_votes)),
             zscore_threshold          = float(zscore_cfg.get("seuil",          defaults.zscore_threshold)),
             iqr_multiplier            = float(iqr_cfg.get("multiplicateur",    defaults.iqr_multiplier)),
+            zscore_threshold_by_col   = {k: float(v) for k, v in zscore_cfg.get("seuil_par_colonne", {}).items()},
+            iqr_multiplier_by_col     = {k: float(v) for k, v in iqr_cfg.get("multiplicateur_par_colonne", {}).items()},
             if_contamination          = float(if_cfg.get("contamination",      defaults.if_contamination)),
             if_n_estimators           = int(if_cfg.get("n_estimateurs",        defaults.if_n_estimators)),
             if_max_samples            = int(if_cfg.get("max_samples",          defaults.if_max_samples)),

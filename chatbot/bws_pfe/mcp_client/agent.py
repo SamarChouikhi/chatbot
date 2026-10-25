@@ -4,7 +4,7 @@ import os
 import re
 import time
 from collections import OrderedDict
-from typing import Any, Dict
+from typing import Any, Dict, NamedTuple
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools  import load_mcp_tools
@@ -82,6 +82,55 @@ def _tool_label(tool_name: str, lang: str) -> str:
 
 def _ui(key: str, lang: str) -> str:
     return _UI_STRINGS[key].get(lang, _UI_STRINGS[key]['fr'])
+
+
+class _StreamErrorClass(NamedTuple):
+    """Classification d'une exception levée pendant stream_process — pilote le choix
+    entre fallback (changement de backend) et échec direct (system_error)."""
+    is_timeout: bool
+    is_func_fail: bool
+    is_connection_error: bool
+    is_model_overloaded: bool
+    is_quota: bool  # True ⇒ transitoire, tente un fallback ; False ⇒ échec direct
+
+
+def _classify_stream_error(err: str, is_timeout_exc: bool = False) -> _StreamErrorClass:
+    """Classifie le message d'erreur d'un appel LLM échoué pour décider si un
+    fallback vers un autre backend doit être tenté (voir stream_process).
+
+    `is_timeout_exc` : True si l'exception d'origine est un asyncio.TimeoutError
+    (certains timeouts ne portent pas le mot "timeout" dans leur message).
+    """
+    low = err.lower()
+    is_timeout = is_timeout_exc or any(k in low for k in [
+        'timeout', 'timed out', 'readtimeout', 'apitimeouterror',
+    ])
+    is_func_fail = any(k in low for k in [
+        'failed to call a function', 'failed_generation',
+    ])
+    # Problème réseau pur : ne pas marquer les clés épuisées, juste changer de backend.
+    is_connection_error = any(k in low for k in [
+        'connection error', 'apiconnectionerror', 'connectionerror',
+        'cannot connect', 'connection refused', 'unreachable',
+    ])
+    # Modèle surchargé (ex: Nvidia free tier via OpenRouter) ≠ clé épuisée.
+    # Ne pas marquer la clé exhausted dans ce cas.
+    is_model_overloaded = any(k in low for k in [
+        'resourceexhausted', 'resource exhausted', 'request limit',
+        'limit reached', 'worker local', 'overloaded', 'upstream error',
+        'service unavailable', 'temporarily unavailable', '503', '502',
+        'bad gateway',
+    ])
+    # Quota/facturation épuisé (ex: crédit Cerebras à zéro) : vraie exhaustion, pas transitoire —
+    # la clé doit être marquée exhausted pour ne plus être retentée (cf. branches groq/cerebras plus bas).
+    is_quota = is_timeout or is_func_fail or is_connection_error or is_model_overloaded or any(
+        k in low for k in [
+            '413', 'too large', 'rate_limit', 'rate limit', '429',
+            '402', 'payment required', 'payment_required', 'insufficient_quota',
+            'insufficient quota', 'billing',
+        ]
+    )
+    return _StreamErrorClass(is_timeout, is_func_fail, is_connection_error, is_model_overloaded, is_quota)
 
 # Outil MCP → module requis (None = outil général, toujours disponible)
 _TOOL_MODULE_MAP: dict[str, str | None] = {
@@ -174,7 +223,16 @@ class _ThinkStreamFilter:
     """Supprime les blocs <think>…</think> du stream token par token.
     Nécessaire pour Qwen3/reasoning models dont le raisonnement interne
     serait autrement visible dans le chat (Angular strip les balises HTML
-    mais affiche leur contenu)."""
+    mais affiche leur contenu).
+
+    Un token LLM ne coïncide pas forcément avec une frontière de balise —
+    '<think>' peut arriver en tant que '<th' puis 'ink>'. On ne relâche donc
+    jamais un suffixe du buffer qui pourrait être le début d'une balise (open
+    ou close) : il reste tamponné jusqu'au feed() suivant. Vider tout le
+    buffer dès que la balise attendue n'est pas trouvée (comme le faisait
+    l'implémentation précédente) perd ce suffixe partiel — pour la balise
+    fermante, ça bloque définitivement le filtre en mode "thinking" et avale
+    silencieusement tout le reste de la réponse."""
 
     _OPEN  = '<think>'
     _CLOSE = '</think>'
@@ -183,28 +241,51 @@ class _ThinkStreamFilter:
         self._buf      = ''
         self._thinking = False
 
+    @staticmethod
+    def _partial_suffix_len(buf: str, marker: str) -> int:
+        """Longueur du plus long suffixe de *buf* qui est aussi un préfixe de
+        *marker* — à conserver au buffer car il peut être le début d'une
+        balise coupée par la frontière entre deux tokens."""
+        for length in range(min(len(buf), len(marker) - 1), 0, -1):
+            if buf.endswith(marker[:length]):
+                return length
+        return 0
+
     def feed(self, token: str) -> str:
         """Retourne la partie visible du token (hors blocs thinking). Peut retourner ''."""
         self._buf += token
         out = ''
-        while self._buf:
-            if self._thinking:
-                end = self._buf.find(self._CLOSE)
-                if end == -1:
-                    self._buf = ''   # bloc non fermé — vider et attendre la suite
-                    break
-                self._buf    = self._buf[end + len(self._CLOSE):]
-                self._thinking = False
-            else:
-                start = self._buf.find(self._OPEN)
-                if start == -1:
-                    out       += self._buf
-                    self._buf  = ''
-                    break
-                out           += self._buf[:start]
-                self._buf      = self._buf[start + len(self._OPEN):]
-                self._thinking = True
+        while True:
+            marker = self._CLOSE if self._thinking else self._OPEN
+            idx    = self._buf.find(marker)
+            if idx != -1:
+                if not self._thinking:
+                    out += self._buf[:idx]
+                self._buf      = self._buf[idx + len(marker):]
+                self._thinking = not self._thinking
+                continue
+            keep = self._partial_suffix_len(self._buf, marker)
+            if not self._thinking:
+                out += self._buf[:len(self._buf) - keep] if keep else self._buf
+            self._buf = self._buf[len(self._buf) - keep:] if keep else ''
+            break
         return out
+
+
+_THINK_RE = re.compile(r'<think>.*?</think>', re.DOTALL)
+
+
+def _strip_think(text: str) -> str:
+    """Supprime les blocs <think>…</think> d'une réponse complète déjà assemblée.
+    Miroir non-streaming de _ThinkStreamFilter — nécessaire car process() (non-stream)
+    récupère result['messages'][-1].content d'un coup, sans passer par .feed()."""
+    if not text:
+        return text
+    cleaned = _THINK_RE.sub('', text)
+    open_idx = cleaned.find('<think>')   # bloc non fermé (réponse tronquée par un timeout)
+    if open_idx != -1:
+        cleaned = cleaned[:open_idx]
+    return cleaned.strip()
 
 # Mapping capteur → outil d'analyse pour le routing hint.
 _SENSOR_ANALYSIS_TOOL: dict[str, str] = {
@@ -697,7 +778,7 @@ class AriaAgent:
                 executor.ainvoke({'messages': messages_input}, config=config),
                 timeout=timeout,
             )
-            answer      = result['messages'][-1].content
+            answer      = _strip_think(result['messages'][-1].content)
             level       = detect_response_level(result)
             tools_used  = [m.name for m in result.get('messages', [])
                            if isinstance(m, ToolMessage)]
@@ -718,7 +799,7 @@ class AriaAgent:
                         executor.ainvoke({'messages': retry_input}, config=retry_config),
                         timeout=timeout,
                     )
-                    retry_answer = retry_result['messages'][-1].content
+                    retry_answer = _strip_think(retry_result['messages'][-1].content)
                     retry_tools  = [m.name for m in retry_result.get('messages', [])
                                     if isinstance(m, ToolMessage)]
                     retry_report = check_output(retry_answer, retry_tools, intent)
@@ -805,7 +886,7 @@ class AriaAgent:
                         executor_retry.ainvoke({'messages': messages_input_retry}, config=config),
                         timeout=timeout_retry,
                     )
-                    answer   = result['messages'][-1].content
+                    answer   = _strip_think(result['messages'][-1].content)
                     level    = detect_response_level(result)
                     duration = time.time() - start
                     msg_id   = await asyncio.to_thread(
@@ -843,6 +924,92 @@ class AriaAgent:
                 logger.info(f'[AUTO-TITLE] {thread_id} → "{title}"')
         except Exception as e:
             logger.warning(f'[AUTO-TITLE] échec: {str(e)[:60]}')
+
+    async def _switch_backend(self, is_timeout: bool, is_func_fail: bool,
+                               is_connection_error: bool, is_model_overloaded: bool,
+                               tried: set[str] | None = None) -> bool:
+        """Bascule self.llm/self.model_name/self.backend/self.executor vers le prochain
+        backend disponible selon LLM_ORDER, en marquant la clé du backend en échec comme
+        épuisée uniquement si l'erreur n'est pas transitoire (timeout/connexion/surcharge
+        modèle) — ces cas-là laissent la clé intacte, elle sera retentée plus tard (par une
+        prochaine requête ou l'auto-ping horaire).
+
+        `tried` : ensemble des backends déjà tentés dans la requête en cours (muté en place —
+        le backend actuel y est ajouté). Sans ça, une erreur transitoire qui ne marque pas la
+        clé épuisée fait retomber factory.create() sur le MÊME backend qui vient d'échouer
+        (bug observé le 2026-09-09 : OpenRouter surchargé → "bascule" → OpenRouter à nouveau
+        → boucle jusqu'à abandon, sans jamais toucher HuggingFace/Groq). On exclut donc
+        temporairement de LLM_ORDER tout backend déjà tenté dans cette requête.
+
+        Réutilisée par stream_process à chaque niveau de fallback (1er échec, 2e échec…)
+        pour ne jamais abandonner tant qu'un backend de LLM_ORDER reste inessayé.
+        Retourne True si la bascule a réussi (executor reconstruit), False sinon.
+        """
+        if tried is None:
+            tried = set()
+        tried.add(self.backend)
+
+        async with self._lock:
+            factory        = LLMFactory()
+            original_order = os.getenv('LLM_ORDER', '')
+            filtered_order = [b for b in factory._get_order() if b not in tried]
+            if not filtered_order:
+                logger.warning(f'[STREAM FALLBACK] Plus aucun backend inessayé (tried={tried})')
+                return False
+            os.environ['LLM_ORDER'] = ','.join(filtered_order)
+            try:
+                if self.backend == 'groq':
+                    if is_func_fail:
+                        # JSON tool-call generation error: key is intact, try alternate Groq model first.
+                        all_models = factory._collect_groq_models()
+                        alt_models = [m for m in all_models if m != self.model_name]
+                        switched = False
+                        for alt_model in alt_models:
+                            result = factory._try_groq(alt_model)
+                            if result:
+                                self.llm, self.model_name, self.backend = result
+                                switched = True
+                                break
+                        if not switched:
+                            self.llm, self.model_name, self.backend = factory.create()
+                    elif not is_timeout and not is_connection_error:
+                        # True quota/rate-limit: mark key exhausted and switch backend.
+                        # Connection errors leave the key intact.
+                        current_key = factory.key_manager.get_groq_key(self.model_name)
+                        if current_key:
+                            factory.key_manager.mark_groq_exhausted(self.model_name, current_key)
+                        self.llm, self.model_name, self.backend = factory.create()
+                    else:
+                        self.llm, self.model_name, self.backend = factory.create()
+                elif self.backend == 'openrouter':
+                    # Only mark exhausted on a true key quota (429) —
+                    # not on MODEL_OVERLOADED or connection errors (key is still valid).
+                    if not is_timeout and not is_model_overloaded and not is_connection_error:
+                        current_key = factory.key_manager.get_openrouter_key()
+                        if current_key:
+                            factory.key_manager.mark_openrouter_exhausted(current_key)
+                    self.llm, self.model_name, self.backend = factory.create()
+                elif self.backend == 'cerebras':
+                    current_key = factory.key_manager.get_cerebras_key()
+                    # Timeout/connection error = transient — do not mark key exhausted.
+                    if current_key and not is_timeout and not is_connection_error:
+                        factory.key_manager.mark_cerebras_exhausted(current_key)
+                    self.llm, self.model_name, self.backend = factory.create()
+                else:
+                    self.llm, self.model_name, self.backend = factory.create()
+                self.executor = self._cra(
+                    model=self.llm, tools=self.tools,
+                    prompt=self._cached_prompt,
+                    checkpointer=self._checkpointer,
+                )
+                self._invalidate_executor_cache()
+                logger.info(f'[STREAM FALLBACK] Nouveau backend: {self.backend}/{self.model_name}')
+                return True
+            except Exception:
+                logger.exception('[STREAM FALLBACK ERROR]')
+                return False
+            finally:
+                os.environ['LLM_ORDER'] = original_order
 
     async def stream_process(
         self, question: str, thread_id: str,
@@ -1040,28 +1207,8 @@ class AriaAgent:
 
         except Exception as e:
             err      = str(e)
-            is_timeout = isinstance(e, asyncio.TimeoutError) or any(k in err.lower() for k in [
-                'timeout', 'timed out', 'readtimeout', 'apitimeouterror',
-            ])
-            is_func_fail = any(k in err.lower() for k in [
-                'failed to call a function', 'failed_generation',
-            ])
-            # Problème réseau pur : ne pas marquer les clés épuisées, juste changer de backend.
-            is_connection_error = any(k in err.lower() for k in [
-                'connection error', 'apiconnectionerror', 'connectionerror',
-                'cannot connect', 'connection refused', 'unreachable',
-            ])
-            is_quota = is_timeout or is_func_fail or is_connection_error or any(k in err.lower() for k in [
-                '413', 'too large', 'rate_limit', 'rate limit', '429',
-                'resourceexhausted', 'resource exhausted', 'request limit',
-                'limit reached', 'worker local',
-            ])
-            # Modèle surchargé (ex: Nvidia free tier via OpenRouter) ≠ clé épuisée.
-            # Ne pas marquer la clé exhausted dans ce cas.
-            is_model_overloaded = any(k in err.lower() for k in [
-                'resourceexhausted', 'resource exhausted', 'request limit',
-                'limit reached', 'worker local',
-            ])
+            is_timeout, is_func_fail, is_connection_error, is_model_overloaded, is_quota = \
+                _classify_stream_error(err, isinstance(e, asyncio.TimeoutError))
 
             if not is_quota:
                 logger.error(f'[STREAM ERROR] {e}', exc_info=True)
@@ -1076,71 +1223,11 @@ class AriaAgent:
                 'QUOTA/RATE'
             )
             logger.warning(f'[STREAM {log_reason}] Tentative de fallback LLM ({self.backend}/{self.model_name})')
-            async with self._lock:
-                try:
-                    factory = LLMFactory()
-                    if self.backend == 'groq':
-                        if is_func_fail:
-                            # JSON tool-call generation error: key is intact, try alternate Groq model first.
-                            all_models = factory._collect_groq_models()
-                            alt_models = [m for m in all_models if m != self.model_name]
-                            switched = False
-                            for alt_model in alt_models:
-                                result = factory._try_groq(alt_model)
-                                if result:
-                                    self.llm, self.model_name, self.backend = result
-                                    switched = True
-                                    break
-                            if not switched:
-                                self.llm, self.model_name, self.backend = factory.create()
-                        elif not is_timeout and not is_connection_error:
-                            # True quota/rate-limit: mark key exhausted and switch backend.
-                            # Connection errors leave the key intact.
-                            current_key = factory.key_manager.get_groq_key(self.model_name)
-                            if current_key:
-                                factory.key_manager.mark_groq_exhausted(self.model_name, current_key)
-                            self.llm, self.model_name, self.backend = factory.create()
-                        else:
-                            self.llm, self.model_name, self.backend = factory.create()
-                    elif self.backend == 'openrouter':
-                        # Only mark exhausted on a true key quota (429) —
-                        # not on MODEL_OVERLOADED or connection errors (key is still valid).
-                        if not is_timeout and not is_model_overloaded and not is_connection_error:
-                            current_key = factory.key_manager.get_openrouter_key()
-                            if current_key:
-                                factory.key_manager.mark_openrouter_exhausted(current_key)
-                        self.llm, self.model_name, self.backend = factory.create()
-                    elif self.backend == 'cerebras':
-                        current_key = factory.key_manager.get_cerebras_key()
-                        # Timeout/connection error = transient — do not mark key exhausted.
-                        if current_key and not is_timeout and not is_connection_error:
-                            factory.key_manager.mark_cerebras_exhausted(current_key)
-                        self.llm, self.model_name, self.backend = factory.create()
-                    elif self.backend == 'ollama' and is_timeout:
-                        # Retire ollama de l'ordre pour éviter la boucle infinie timeout → fallback → ollama → timeout
-                        original_order = os.getenv('LLM_ORDER', '')
-                        skip_order = ','.join(
-                            b for b in original_order.split(',') if b.strip() != 'ollama'
-                        )
-                        os.environ['LLM_ORDER'] = skip_order
-                        logger.warning(f'[STREAM TIMEOUT] Ollama ignoré pour fallback (ordre temp: {skip_order})')
-                        try:
-                            self.llm, self.model_name, self.backend = factory.create()
-                        finally:
-                            os.environ['LLM_ORDER'] = original_order
-                    else:
-                        self.llm, self.model_name, self.backend = factory.create()
-                    self.executor = self._cra(
-                        model=self.llm, tools=self.tools,
-                        prompt=self._cached_prompt,
-                        checkpointer=self._checkpointer,
-                    )
-                    self._invalidate_executor_cache()
-                    logger.info(f'[STREAM FALLBACK] Nouveau backend: {self.backend}/{self.model_name}')
-                except Exception:
-                    logger.exception('[STREAM FALLBACK ERROR]')
-                    yield {'type': 'error', 'data': _ui('service_unavailable', lang)}
-                    return
+            tried_backends: set[str] = set()
+            if not await self._switch_backend(is_timeout, is_func_fail, is_connection_error,
+                                               is_model_overloaded, tried=tried_backends):
+                yield {'type': 'error', 'data': _ui('service_unavailable', lang)}
+                return
 
             executor_fb    = await self._get_executor(allowed_modules)
             messages_fb    = self._build_messages_input(history, question, lang, routing_hint=hint)
@@ -1226,61 +1313,60 @@ class AriaAgent:
                        'quick_replies': qr_list or None,
                        'chart_data': all_charts_fb or None}
             except Exception as e2:
-                err2      = str(e2)
-                timeout2  = isinstance(e2, asyncio.TimeoutError) or any(
-                    k in err2.lower() for k in ['timeout', 'timed out', 'readtimeout', 'apitimeouterror']
+                err2 = str(e2)
+                is_timeout2, is_func_fail2, is_connection_error2, is_model_overloaded2, is_quota2 = \
+                    _classify_stream_error(err2, isinstance(e2, asyncio.TimeoutError))
+                logger.warning(
+                    f'[STREAM FALLBACK ERROR] quota={is_quota2} timeout={is_timeout2} '
+                    f'backend={self.backend}/{self.model_name} err={err2[:120]}'
                 )
-                logger.warning(f'[STREAM FALLBACK ERROR] timeout={timeout2} backend={self.backend}/{self.model_name} err={err2[:120]}')
 
-                if not (timeout2 and self.backend == 'ollama'):
+                # Un timeout pur hors Ollama (connu pour être lent en local) n'est pas retenté
+                # avec un 3e backend : c'est généralement une requête trop lourde, pas un
+                # problème de disponibilité — message dédié invitant à réduire la période.
+                retry_with_next_backend = is_quota2 and not (is_timeout2 and self.backend != 'ollama')
+
+                if not retry_with_next_backend:
                     err_msg = (_ui('analysis_too_long', lang)
-                               if timeout2 else _ui('service_unavailable', lang))
+                               if is_timeout2 else _ui('service_unavailable', lang))
                     yield {'type': 'error', 'data': err_msg}
                     return
 
-                # Ollama timeout au retry → dernier recours sans Ollama
-                logger.warning('[STREAM RETRY TIMEOUT] Ollama trop lent, dernier recours…')
-                async with self._lock:
-                    try:
-                        orig_order = os.getenv('LLM_ORDER', '')
-                        no_ollama  = ','.join(b for b in orig_order.split(',') if b.strip() != 'ollama')
-                        os.environ['LLM_ORDER'] = no_ollama
-                        try:
-                            factory_lr = LLMFactory()
-                            self.llm, self.model_name, self.backend = factory_lr.create()
-                            self.executor = self._cra(
-                                model=self.llm, tools=self.tools,
-                                prompt=self._cached_prompt, checkpointer=self._checkpointer,
-                            )
-                            self._invalidate_executor_cache()
-                            logger.info(f'[STREAM LAST RESORT] {self.backend}/{self.model_name}')
-                        finally:
-                            os.environ['LLM_ORDER'] = orig_order
-                    except Exception as lr_err:
-                        logger.error(f'[STREAM LAST RESORT ERROR] {lr_err}')
-                        yield {'type': 'error', 'data': _ui('service_unavailable', lang)}
-                        return
+                # 2e échec transitoire consécutif → tente un 3e backend avant d'abandonner
+                # (au lieu de rendre la main directement, cf. bug du 2026-09-09 : OpenRouter 429
+                # → Cerebras 402 → abandon alors que Groq/HuggingFace restaient disponibles).
+                logger.warning('[STREAM RETRY 2] Nouvel échec transitoire, tentative d\'un 3e backend…')
+                if not await self._switch_backend(is_timeout2, is_func_fail2, is_connection_error2,
+                                                   is_model_overloaded2, tried=tried_backends):
+                    yield {'type': 'error', 'data': _ui('service_unavailable', lang)}
+                    return
 
                 executor_lr  = await self._get_executor(allowed_modules)
                 messages_lr  = self._build_messages_input(history, question, lang)
                 full_lr      = ''
+                _timeout_lr  = _get_timeout(self.backend)
+                _sf_lr       = _ThinkStreamFilter()
                 config_lr    = {'recursion_limit': _REACT_RECURSION_LIMIT,
                                 'configurable': {'thread_id': f'{exec_thread_id}_lr_{int(time.time()*1000)}'}}
                 try:
-                    async for event in executor_lr.astream_events(
-                        {'messages': messages_lr}, config=config_lr, version='v2'
+                    async for event in _stream_with_timeout(
+                        executor_lr.astream_events({'messages': messages_lr}, config=config_lr, version='v2'),
+                        _timeout_lr,
                     ):
                         if event['event'] == 'on_chat_model_stream':
                             chunk = event['data'].get('chunk')
                             if chunk and getattr(chunk, 'content', None):
-                                full_lr += chunk.content
-                                yield {'type': 'chunk', 'data': chunk.content}
+                                visible = _sf_lr.feed(chunk.content)
+                                if visible:
+                                    full_lr += visible
+                                    yield {'type': 'chunk', 'data': visible}
                     if not full_lr:
                         full_lr = _ui('no_response', lang)
                         yield {'type': 'chunk', 'data': full_lr}
                     dur_lr       = time.time() - start
                     clean_lr, qr_lr = parse_quick_replies(full_lr)
-                    mid_lr = self._history.save_message(
+                    mid_lr = await asyncio.to_thread(
+                        self._history.save_message,
                         thread_id, 'assistant', clean_lr,
                         level=level, backend=f'{self.backend}/{self.model_name}', duration=dur_lr,
                     )
@@ -1290,9 +1376,6 @@ class AriaAgent:
                 except Exception as e3:
                     logger.error(f'[STREAM LAST RESORT RETRY ERROR] {e3}')
                     yield {'type': 'error', 'data': _ui('service_unavailable', lang)}
-
-    # Ordre de priorité des backends (doit correspondre à LLM_ORDER dans .env)
-    _BACKEND_PRIORITY = ['openrouter', 'groq', 'cerebras', 'ollama', 'gemini', 'huggingface']
 
     async def _auto_ping(self):
         """Tâche de fond : toutes les heures, teste si un meilleur backend est disponible
@@ -1306,16 +1389,19 @@ class AriaAgent:
             await asyncio.sleep(3600)
 
     async def _try_upgrade_backend(self):
-        """Teste les backends de priorité supérieure au backend actuel.
-        Si l'un d'eux répond, bascule dessus et met à jour le cache de clés."""
-        current_rank = self._BACKEND_PRIORITY.index(self.backend) \
-                       if self.backend in self._BACKEND_PRIORITY else len(self._BACKEND_PRIORITY)
+        """Teste les backends de priorité supérieure au backend actuel (ordre = LLM_ORDER
+        du .env, identique à celui utilisé par LLMFactory.create() — pas de liste dupliquée
+        à maintenir en synchro). Si l'un d'eux répond, bascule dessus et met à jour le cache
+        de clés."""
+        factory  = LLMFactory()
+        priority = factory._get_order()
+        current_rank = priority.index(self.backend) \
+                       if self.backend in priority else len(priority)
         if current_rank == 0:
             logger.debug('[AUTO-PING] déjà sur le meilleur backend')
             return
 
-        factory = LLMFactory()
-        better_backends = self._BACKEND_PRIORITY[:current_rank]
+        better_backends = priority[:current_rank]
 
         for backend_name in better_backends:
             # Réinitialise temporairement les clés épuisées de ce backend pour re-tester
@@ -1328,7 +1414,7 @@ class AriaAgent:
                 'openrouter' : factory._try_openrouter,
                 'gemini'     : factory._try_gemini,
                 'groq'       : factory._try_groq_all,
-                'huggingface': factory._try_huggingface,
+                'huggingface': factory._try_huggingface_all,
             }.get(backend_name)
 
             if not try_fn:

@@ -1,32 +1,16 @@
-import {
-  Component, OnInit, OnDestroy, AfterViewInit,
-  ViewChild, ElementRef, NgZone
-} from '@angular/core';
-import { Router } from '@angular/router';
-import { Subject, forkJoin } from 'rxjs';
-import { ChatTriggerService } from '../core/services/chat-trigger.service';
-import { takeUntil, finalize } from 'rxjs/operators';
-import { TranslateService } from '@ngx-translate/core';
+import { Component, ViewChild, ElementRef } from '@angular/core';
+import { Observable, forkJoin } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import {
   GazService, GazSummaryDto, GazAlertDto, GazChartDto, RtGmDto
 } from '../services/gaz.service';
-import {
-  Chart, ChartConfiguration,
-  LineController, BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend, Filler
-} from 'chart.js';
-
-Chart.register(
-  LineController, BarController, DoughnutController, RadarController,
-  CategoryScale, LinearScale, RadialLinearScale,
-  PointElement, LineElement, BarElement, ArcElement,
-  Tooltip, Legend, Filler
-);
+import { ChartConfiguration } from 'chart.js';
+import { CHART_BASE } from '../shared/chart-setup';
+import { DateRange, DomainDashboardBase, MODAL_CHART } from '../shared/domain-dashboard.base';
 
 // ── Palette centralisée ──────────────────────────────────────
 const GP = {
+  ...CHART_BASE,
   main:     '#0d9488',
   mainDim:  'rgba(13,148,136,0.15)',
   cyan:     '#06b6d4',
@@ -39,9 +23,6 @@ const GP = {
   blue:     '#0369a1',
   blueDim:  'rgba(3,105,161,0.15)',
   red:      '#e74c3c',
-  grid:     'rgba(255,255,255,0.06)',
-  text:     'rgba(255,255,255,0.45)',
-  tooltip:  'rgba(6,12,26,0.95)'
 };
 
 interface KpiCard {
@@ -58,6 +39,12 @@ interface ChartBar {
   debit: number;
 }
 
+interface GazData {
+  summaries: GazSummaryDto[];
+  alerts:    GazAlertDto[];
+  rt:        RtGmDto[];
+}
+
 type ChartModalType = 'evolution' | 'bar';
 
 @Component({
@@ -65,87 +52,43 @@ type ChartModalType = 'evolution' | 'bar';
   templateUrl: './gaz.component.html',
   styleUrls: ['./gaz.component.scss']
 })
-export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
+export class GazComponent extends DomainDashboardBase<GazSummaryDto, GazAlertDto, GazData> {
 
-  // ── Canvas refs (inline charts) ───────────────────────────────
-  @ViewChild('gLineCanvas')    gLineCanvas!:    ElementRef<HTMLCanvasElement>;
-  @ViewChild('gDonutCanvas')   gDonutCanvas!:   ElementRef<HTMLCanvasElement>;
-  @ViewChild('gBarCanvas')     gBarCanvas!:     ElementRef<HTMLCanvasElement>;
-  @ViewChild('gFlowCanvas')    gFlowCanvas!:    ElementRef<HTMLCanvasElement>;
-  @ViewChild('gGaugeCanvas')   gGaugeCanvas!:   ElementRef<HTMLCanvasElement>;
-  // ── Canvas ref (modal chart) ──────────────────────────────────
-  @ViewChild('modalChartCanvas') modalChartCanvasRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('gLineCanvas')      gLineCanvas!:         ElementRef<HTMLCanvasElement>;
+  @ViewChild('gDonutCanvas')     gDonutCanvas!:        ElementRef<HTMLCanvasElement>;
+  @ViewChild('gBarCanvas')       gBarCanvas!:          ElementRef<HTMLCanvasElement>;
+  @ViewChild('gFlowCanvas')      gFlowCanvas!:         ElementRef<HTMLCanvasElement>;
+  @ViewChild('gGaugeCanvas')     gGaugeCanvas!:        ElementRef<HTMLCanvasElement>;
   @ViewChild('gDailyCanvas')     gDailyCanvas!:        ElementRef<HTMLCanvasElement>;
+  @ViewChild('modalChartCanvas') modalChartCanvasRef!: ElementRef<HTMLCanvasElement>;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private gLineChart!:  any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private gDonutChart!: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private gBarChart!:   any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private gFlowChart!:  any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private gGaugeChart!: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private modalChart:   any = null;
-  private gDailyChart:  any = null;
+  protected override readonly modalBackdropClass = 'gaz-chart-modal-backdrop';
+  protected override readonly insightLabel = 'Gaz';
 
-  // ── UI state ──────────────────────────────────────────────────
-  isLoading = false;
-  loadError = false;
+  rtData: RtGmDto[]          = [];
+  chart:  GazChartDto | null = null;
 
-  // ── Period ────────────────────────────────────────────────────
-  selectedPeriod = 30;
-  periodOptions: Array<{ label: string; value: number }> = [];
-  dataRange = '';
-
-  // ── API data ──────────────────────────────────────────────────
-  summaries: GazSummaryDto[] = [];
-  alerts:    GazAlertDto[]   = [];
-  rtData:    RtGmDto[]       = [];
-  chart:     GazChartDto | null = null;
-
-  // ── Derived ───────────────────────────────────────────────────
   kpiCards:  KpiCard[]  = [];
   chartBars: ChartBar[] = [];
 
-  // ── Totals ────────────────────────────────────────────────────
   totalConso = 0;
   totalCo2   = 0;
   totalCost  = 0;
   alertCount = 0;
   avgDebit   = 0;
+  leakCount  = 0;
 
-  // ── KPI Detail Panel ──────────────────────────────────────────
-  selectedKpi: string | null = null;
-
-  // ── Chart Modal ───────────────────────────────────────────────
-  chartModalOpen  = false;
   chartModalType: ChartModalType = 'evolution';
-
   chartModalTitle = '';
+  dailyChartSub   = '';
 
-  private destroy$  = new Subject<void>();
+  constructor(private gazSvc: GazService) { super(); }
 
-  // Arrow fn — keeps `this` bound when used as DOM listener
-  private onEscKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') this.closeChartModal();
-  };
+  protected override get modalCanvas() { return this.modalChartCanvasRef; }
 
-  constructor(
-    private gazSvc:    GazService,
-    private router:    Router,
-    private zone:      NgZone,
-    private translate: TranslateService,
-    private chatTrigger: ChatTriggerService
-  ) {}
-
-  openAriaInsight(section: string, event: MouseEvent): void {
-    event.stopPropagation();
-    const p = this.selectedPeriod;
+  protected override insightPrompts(p: number): Record<string, string> {
     const consoM3 = (this.totalConso / 1000).toFixed(2);
-    const prompts: Record<string, string> = {
+    return {
       summary: `Analyse les statistiques Gaz (${p}j) :\n` +
         `Consommation : ${consoM3} m³ (${this.totalConso.toFixed(0)} L)\n` +
         `CO₂ émis : ${this.totalCo2.toFixed(1)} kgCO₂ | Coût : ${this.totalCost.toFixed(2)} TND\n` +
@@ -166,69 +109,29 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
         `Total : ${this.alertCount} alerte(s) · Capteurs : ${this.summaries.length}\n` +
         `Quelles sont les actions prioritaires à mener ?`,
     };
-    this.chatTrigger.open(prompts[section] ?? `Analyse Gaz — ${section} — ${p}j.`);
-  }
-
-  ngOnInit(): void {
-    this._buildPeriodOptions();
-    this.dataRange = this.translate.instant('COMMON.LOADING');
-    this.load();
-    this.translate.onLangChange.pipe(takeUntil(this.destroy$)).subscribe(() => {
-      this._buildPeriodOptions();
-      const { from, to } = this.gazSvc.getLastNDaysRange(this.selectedPeriod);
-      this.updateDateRange(from, to);
-      this.buildKpi();
-      this.buildAllGazCharts();
-    });
-  }
-
-  ngAfterViewInit(): void {}
-
-  ngOnDestroy(): void {
-    this.destroy$.next();
-    this.destroy$.complete();
-    document.removeEventListener('keydown', this.onEscKey);
-    [this.gLineChart, this.gDonutChart, this.gBarChart,
-     this.gFlowChart, this.gGaugeChart, this.modalChart, this.gDailyChart]
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .forEach((c: any) => c?.destroy());
   }
 
   // ══════════════════════════════════════════════════════════════
   // CHARGEMENT
   // ══════════════════════════════════════════════════════════════
 
-  load(): void {
-    this.isLoading = true;
-    this.loadError = false;
-    const { from, to } = this.gazSvc.getLastNDaysRange(this.selectedPeriod);
-    this.updateDateRange(from, to);
+  protected override dateRangeFor(days: number): DateRange {
+    return this.gazSvc.getLastNDaysRange(days);
+  }
 
-    forkJoin({
+  protected override fetchData({ from, to }: DateRange): Observable<GazData> {
+    return forkJoin({
       summaries: this.gazSvc.getAllSummaries(from, to),
       alerts:    this.gazSvc.getAlerts(),
       rt:        this.gazSvc.getRealTimeAll()
-    })
-    .pipe(takeUntil(this.destroy$), finalize(() => this.isLoading = false))
-    .subscribe({
-      next: ({ summaries, alerts, rt }) => {
-        this.summaries = summaries;
-        this.alerts    = alerts;
-        this.rtData    = rt;
-        this.buildKpi();
-        this.loadChart(from, to);
-        setTimeout(() => this.buildAllGazCharts(), 300);
-      },
-      error: () => { this.loadError = true; }
     });
   }
 
-  onPeriodChange(period: number): void {
-    this.selectedPeriod = period;
-    this.load();
+  protected override applyData(data: GazData): void {
+    this.rtData = data.rt;
   }
 
-  private loadChart(from: Date, to: Date): void {
+  protected override afterDataLoaded({ from, to }: DateRange): void {
     const firstDevice = this.summaries[0]?.idDevice;
     if (!firstDevice) { this.buildChartBars(); return; }
 
@@ -255,11 +158,21 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
+  protected override refreshLabels(): void {
+    const t = this.translate;
+    this.chartModalTitle = this.chartModalType === 'evolution'
+      ? t.instant('ENERGY.EVOLUTION') + ' — m³'
+      : t.instant('ENERGY.CO2_COST_PER_METER');
+    this.dailyChartSub = this.chartBars.length > 0
+      ? t.instant('ENERGY.DAILY_L')
+      : t.instant('ENERGY.SUMMARY_BY_METER');
+  }
+
   // ══════════════════════════════════════════════════════════════
   // DONNÉES DÉRIVÉES
   // ══════════════════════════════════════════════════════════════
 
-  private buildKpi(): void {
+  protected override buildKpi(): void {
     this.totalConso = this.summaries.reduce((s, d) => s + (d.totalConsoM ?? 0), 0);
     this.totalCo2   = this.summaries.reduce((s, d) => s + (d.co2Kg       ?? 0), 0);
     this.totalCost  = this.summaries.reduce((s, d) => s + (d.costTnd     ?? 0), 0);
@@ -269,7 +182,7 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
       : (this.summaries[0]?.avgDebit ?? 0);
 
     const trend      = this.summaries[0]?.trend ?? '+0.0%';
-    const criticals  = this.alerts.filter(a => a.severity === 'CRITICAL').length;
+    const criticals  = this.countBySeverity('CRITICAL');
     this.leakCount   = this.rtData.filter(r => r.leak > 0).length;
     const leakCnt    = this.leakCount;
     const t          = this.translate;
@@ -318,7 +231,7 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
         icon: '<svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/></svg>'
       }
     ];
-    this._buildKpiDefs();
+    this.buildKpiDefs();
   }
 
   private buildChartBars(): void {
@@ -335,18 +248,16 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
       debit: p.debit ?? 0
     }));
     this.dailyChartSub = this.translate.instant('ENERGY.DAILY_L');
-    setTimeout(() => this.buildAllGazCharts(), 300);
+    this.scheduleChartsRender();
   }
 
-  private buildAllGazCharts(): void {
-    this.zone.runOutsideAngular(() => {
-      this.buildDailyChart();
-      this.buildGazLine();
-      this.buildGazDonut();
-      this.buildGazBar();
-      this.buildGazFlowChart();
-      this.buildGazGauge();
-    });
+  protected override buildCharts(): void {
+    this.buildDailyChart();
+    this.buildGazLine();
+    this.buildGazDonut();
+    this.buildGazBar();
+    this.buildGazFlowChart();
+    this.buildGazGauge();
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -355,7 +266,6 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private buildGazLine(): void {
     if (!this.gLineCanvas) return;
-    this.gLineChart?.destroy();
     const pts = this.chart?.points ?? [];
     const cfg: ChartConfiguration<'line'> = {
       type: 'line',
@@ -386,12 +296,11 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.gLineChart = new Chart(this.gLineCanvas.nativeElement, cfg);
+    this.renderChart('line', this.gLineCanvas, cfg);
   }
 
   private buildGazDonut(): void {
     if (!this.gDonutCanvas || !this.summaries.length) return;
-    this.gDonutChart?.destroy();
     const colors = [GP.main, GP.cyan, GP.green, GP.teal, GP.blue, GP.lime];
     const cfg: ChartConfiguration<'doughnut'> = {
       type: 'doughnut',
@@ -415,12 +324,11 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.gDonutChart = new Chart(this.gDonutCanvas.nativeElement, cfg);
+    this.renderChart('donut', this.gDonutCanvas, cfg);
   }
 
   private buildGazBar(): void {
     if (!this.gBarCanvas || !this.summaries.length) return;
-    this.gBarChart?.destroy();
     const cfg: ChartConfiguration<'bar'> = {
       type: 'bar',
       data: {
@@ -452,20 +360,19 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       }
     };
-    this.gBarChart = new Chart(this.gBarCanvas.nativeElement, cfg);
+    this.renderChart('bar', this.gBarCanvas, cfg);
   }
 
   private buildGazFlowChart(): void {
     if (!this.gFlowCanvas) return;
-    this.gFlowChart?.destroy();
     const pts = this.chart?.points ?? [];
-    if (!pts.length) return;
+    if (!pts.length) { this.destroyChart('flow'); return; }
     const labels = pts.map(p => p.label);
     const avg    = pts.map(p => +(p.debit ?? 0).toFixed(3));
     const min    = avg.map(v => +(v * 0.65).toFixed(3));
     const max    = avg.map(v => +(v * 1.35).toFixed(3));
 
-    this.gFlowChart = new Chart(this.gFlowCanvas.nativeElement, {
+    this.renderChart('flow', this.gFlowCanvas, {
       type: 'line',
       data: {
         labels,
@@ -517,12 +424,11 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private buildGazGauge(): void {
     if (!this.gGaugeCanvas) return;
-    this.gGaugeChart?.destroy();
     const maxDebit  = 100;
     const ratio     = Math.min(Math.max(this.avgDebit / maxDebit, 0), 1);
     const remain    = 1 - ratio;
     const color     = ratio < 0.3 ? GP.green : ratio < 0.7 ? GP.main : GP.cyan;
-    this.gGaugeChart = new Chart(this.gGaugeCanvas.nativeElement, {
+    this.renderChart('gauge', this.gGaugeCanvas, {
       type: 'doughnut',
       data: {
         datasets: [{
@@ -544,11 +450,10 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private buildDailyChart(): void {
     if (!this.gDailyCanvas) return;
-    this.gDailyChart?.destroy();
 
     const pts = this.chartBars;
     const useSummaries = !pts.length && this.summaries.length > 0;
-    if (!pts.length && !useSummaries) return;
+    if (!pts.length && !useSummaries) { this.destroyChart('daily'); return; }
 
     const isTimeSeries = pts.length > 0;
     const meterColors  = [GP.main, GP.green, GP.teal, GP.cyan, GP.lime];
@@ -576,7 +481,7 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
       ? pts.map(b => b.label)
       : this.summaries.map(s => `Compteur #${s.idDevice}`);
 
-    this.gDailyChart = new Chart(this.gDailyCanvas.nativeElement, {
+    this.renderChart('daily', this.gDailyCanvas, {
       type: 'bar',
       data: { labels, datasets },
       options: {
@@ -628,41 +533,17 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
   // ══════════════════════════════════════════════════════════════
 
   openChartModal(type: ChartModalType): void {
-    this.chartModalType  = type;
-    this.chartModalTitle = type === 'evolution'
-      ? this.translate.instant('ENERGY.EVOLUTION') + ' — m³'
-      : this.translate.instant('ENERGY.CO2_COST_PER_METER');
-    this.chartModalOpen = true;
-    document.addEventListener('keydown', this.onEscKey);
-    setTimeout(() => this.initModalChart(), 80);
+    this.chartModalType = type;
+    this.refreshLabels();
+    this.showChartModal();
   }
 
-  closeChartModal(): void {
-    this.chartModalOpen = false;
-    document.removeEventListener('keydown', this.onEscKey);
-    this.modalChart?.destroy();
-    this.modalChart = null;
-  }
-
-  handleChartModalBackdrop(e: MouseEvent): void {
-    if ((e.target as HTMLElement).classList.contains('gaz-chart-modal-backdrop')) {
-      this.closeChartModal();
+  protected override buildModalChart(canvas: HTMLCanvasElement): void {
+    if (this.chartModalType === 'evolution') {
+      this.buildModalEvolution(canvas);
+    } else {
+      this.buildModalBar(canvas);
     }
-  }
-
-  private initModalChart(): void {
-    const canvas = this.modalChartCanvasRef?.nativeElement;
-    if (!canvas) return;
-    this.modalChart?.destroy();
-    this.modalChart = null;
-
-    this.zone.runOutsideAngular(() => {
-      if (this.chartModalType === 'evolution') {
-        this.buildModalEvolution(canvas);
-      } else {
-        this.buildModalBar(canvas);
-      }
-    });
   }
 
   private buildModalEvolution(canvas: HTMLCanvasElement): void {
@@ -676,7 +557,7 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
     gr.addColorStop(0.6, 'rgba(13,148,136,0.08)');
     gr.addColorStop(1,   'rgba(13,148,136,0.00)');
 
-    this.modalChart = new Chart(ctx, {
+    this.renderChart(MODAL_CHART, ctx, {
       type: 'line',
       data: {
         labels:   pts.map(p => p.label),
@@ -729,7 +610,7 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
   private buildModalBar(canvas: HTMLCanvasElement): void {
     if (!this.summaries.length) return;
 
-    this.modalChart = new Chart(canvas, {
+    this.renderChart(MODAL_CHART, canvas, {
       type: 'bar',
       data: {
         labels:   this.summaries.map(s => `Compteur #${s.idDevice}`),
@@ -795,35 +676,11 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
   // KPI DETAIL PANEL
   // ══════════════════════════════════════════════════════════════
 
-  openKpi(key: string):  void { this.selectedKpi = key; this.currentKpiDef = this.kpiDefs[key] ?? null; }
-  closeKpi():            void { this.selectedKpi = null; this.currentKpiDef = null; }
-
-  kpiDefs: Record<string, any> = {};
-  currentKpiDef: any = null;
-  dailyChartSub = '';
-  leakCount = 0;
-
-  private _buildPeriodOptions(): void {
-    const t = this.translate;
-    this.periodOptions = [
-      { label: t.instant('ENERGY.PERIOD_24H'), value: 1  },
-      { label: t.instant('ENERGY.PERIOD_7D'),  value: 7  },
-      { label: t.instant('ENERGY.PERIOD_30D'), value: 30 },
-      { label: t.instant('ENERGY.PERIOD_3M'),  value: 90 },
-    ];
-    this.chartModalTitle = this.chartModalType === 'evolution'
-      ? t.instant('ENERGY.EVOLUTION') + ' — m³'
-      : t.instant('ENERGY.CO2_COST_PER_METER');
-    this.dailyChartSub = this.chartBars.length > 0
-      ? t.instant('ENERGY.DAILY_L')
-      : t.instant('ENERGY.SUMMARY_BY_METER');
-  }
-
-  private _buildKpiDefs(): void {
+  private buildKpiDefs(): void {
     const t         = this.translate;
     const criticals = this.countBySeverity('CRITICAL');
     const lc        = this.leakCount;
-    this.kpiDefs = {
+    this.setKpiDefs({
       conso: {
         title:          t.instant('GAZ.KPI_CONSUMPTION') + ' (m³)',
         accent:         '#0d9488',
@@ -904,8 +761,7 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
         recommendations: [t.instant('GAZ.KPI_REC_LEAKS_1'), t.instant('GAZ.KPI_REC_LEAKS_2'), t.instant('GAZ.KPI_REC_LEAKS_3')],
         devices: this.rtData.filter(r => r.leak > 0).map(r => ({ id: r.idDevice, val: t.instant('GAZ.LEAK_ACTIVE'), unit: '', ok: false, badge: 'CRITICAL' }))
       }
-    };
-    if (this.selectedKpi) this.currentKpiDef = this.kpiDefs[this.selectedKpi] ?? null;
+    });
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -963,44 +819,4 @@ export class GazComponent implements OnInit, OnDestroy, AfterViewInit {
     };
     return m[type] ?? this.translate.instant('GAZ.REC_DEFAULT');
   }
-
-  countBySeverity(sev: string): number {
-    return this.alerts.filter(a => a.severity === sev).length;
-  }
-
-  fmtAlertDate(d: string): string {
-    if (!d) return '—';
-    const dt = new Date(d);
-    const dd = String(dt.getDate()).padStart(2, '0');
-    const mm = String(dt.getMonth() + 1).padStart(2, '0');
-    const hh = String(dt.getHours()).padStart(2, '0');
-    const mn = String(dt.getMinutes()).padStart(2, '0');
-    return `${dd}/${mm} ${hh}:${mn}`;
-  }
-
-  fmt(n: number, dec = 0): string {
-    if (n == null || isNaN(n)) return '0';
-    return n.toLocaleString(this.locale, { minimumFractionDigits: dec, maximumFractionDigits: dec });
-  }
-
-  private get locale(): string {
-    const l = this.translate.currentLang ?? 'fr';
-    return l === 'ar' ? 'ar-TN' : l === 'en' ? 'en-US' : 'fr-FR';
-  }
-
-  private isTrendUp(t: string): boolean { return !t.startsWith('-'); }
-
-  private fmtDateLabel(d: string): string {
-    if (!d) return '';
-    const p = d.substring(0, 10).split('-');
-    return p.length === 3 ? `${p[2]}/${p[1]}` : d;
-  }
-
-  private updateDateRange(from: Date, to: Date): void {
-    const o: Intl.DateTimeFormatOptions = { day: '2-digit', month: 'short', year: 'numeric' };
-    this.dataRange = `${from.toLocaleDateString(this.locale, o)} → ${to.toLocaleDateString(this.locale, o)}`;
-  }
-
-  goBack():              void { this.router.navigate(['/dashboard']); }
-  navigateTo(p: string): void { this.router.navigate([p]); }
 }

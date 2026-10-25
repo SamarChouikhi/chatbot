@@ -1,3 +1,6 @@
+# ══════════════════════════════════════════════════════════════════════════
+# PARTIE CHART — conversion des sorties d'outils MCP en configs Chart.js
+# ══════════════════════════════════════════════════════════════════════════
 import json
 import logging
 

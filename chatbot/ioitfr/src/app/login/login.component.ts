@@ -60,7 +60,7 @@ export class LoginComponent implements OnInit {
     this.isLoading = true;
     this.errorMessage = '';
 
-    const loginValue = this.loginForm.value.email;
+    const loginValue = (this.loginForm.value.email || '').trim();
     const passwordValue = this.loginForm.value.password;
     const rememberMe = this.loginForm.value.rememberMe; // ← valeur de la case
 

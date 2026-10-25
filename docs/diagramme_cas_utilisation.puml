@@ -1,0 +1,77 @@
+@startuml Diagramme_Cas_Utilisation_ARIA
+
+' =========================================================================
+'  ARIA - Diagramme de Cas d'Utilisation
+'  Rapport PFE - Version finale
+' =========================================================================
+
+left to right direction
+
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.3
+skinparam packageStyle rectangle
+
+skinparam usecase {
+    BackgroundColor #E8F0FE
+    BorderColor #4A78C4
+    FontStyle bold
+}
+
+skinparam actor {
+    BackgroundColor #ECEFF1
+    BorderColor #455A64
+    FontStyle bold
+}
+
+title <b>ARIA - Diagramme de Cas d'Utilisation</b>
+
+actor "Utilisateur" as User
+actor "Administrateur" as Admin
+
+rectangle "Systeme ARIA" {
+
+    usecase "S'authentifier" as UC0
+
+    usecase "Consulter les dashboards\n(energie, eau, gaz, carburant)" as UC1
+    usecase "Consulter les alertes" as UC2
+    usecase "Interroger l'assistant\nconversationnel" as UC3
+    usecase "Consulter les recommandations" as UC4
+    usecase "Generer et exporter\nun rapport" as UC5
+    usecase "Recevoir des notifications\nproactives" as UC6
+    usecase "Donner un avis sur\nune reponse" as UC7
+    usecase "Envoyer une image\nou un message vocal" as UC8
+
+    usecase "Gerer les utilisateurs\net les permissions" as UC9
+    usecase "Importer des donnees\n(CSV)" as UC10
+    usecase "Configurer les seuils\nde detection" as UC11
+    usecase "Consulter le journal\nd'execution des traitements" as UC12
+
+    UC3 ..> UC0 : <<include>>
+    UC1 ..> UC0 : <<include>>
+    UC9 ..> UC0 : <<include>>
+
+    UC8 ..> UC3 : <<extend>>
+}
+
+User --> UC0
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+User --> UC7
+User --> UC8
+
+Admin --> UC9
+Admin --> UC10
+Admin --> UC11
+Admin --> UC12
+
+Admin --|> User
+
+@enduml

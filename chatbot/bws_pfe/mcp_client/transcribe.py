@@ -1,3 +1,6 @@
+# ══════════════════════════════════════════════════════════════════════════
+# PARTIE STT (Speech-To-Text) — transcription audio via AssemblyAI
+# ══════════════════════════════════════════════════════════════════════════
 import os
 import asyncio
 import logging
@@ -31,6 +34,8 @@ _LANG_MAP = {'fr': 'fr', 'en': 'en_us', 'ar': 'ar', 'auto': None}
 
 ASSEMBLYAI_BASE = 'https://api.assemblyai.com/v2'
 
+
+# ── Appels AssemblyAI (upload → création job → polling) ─────────────────────
 
 def _headers() -> dict:
     key = os.getenv('ASSEMBLYAI_API_KEY')
@@ -90,6 +95,8 @@ async def _poll_transcript(transcript_id: str) -> str:
 
     raise RuntimeError('Timeout : transcription trop longue (> 2 min)')
 
+
+# ── Route /transcribe ────────────────────────────────────────────────────────
 
 @transcribe_router.post('/transcribe', tags=['stt'])
 async def transcribe_audio(

@@ -5,6 +5,7 @@ import json
 import logging
 from dataclasses import asdict, dataclass
 from datetime import date
+from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -15,6 +16,14 @@ import torch
 _log = logging.getLogger(__name__)
 
 MONTHS_TO_MATURITY = 12
+
+
+class RetrainOutcome(str, Enum):
+    """Result of a MonthlyRetrainer.retrain() call — lets callers distinguish
+    an actually-adopted checkpoint from a failure, instead of assuming every
+    call produced a usable new model."""
+    ADOPTED = "adopted"   # new checkpoint saved and now active for this device
+    FAILED  = "failed"    # fine-tuning itself failed — state left untouched, retry next run
 
 
 # ── Config protocol ───────────────────────────────────────────────────────────
@@ -102,10 +111,15 @@ class MonthlyRetrainer:
         device_id: str,
         device_df: pd.DataFrame,
         pipeline:  Any,
-    ) -> None:
+    ) -> RetrainOutcome:
         """
         Fine-tune Chronos on this device's accumulated data, then persist state.
-        If fine-tuning fails (API mismatch), state is updated without checkpoint.
+        If fine-tuning itself fails (API mismatch), state is left untouched so
+        the same month is retried on the next run.
+
+        Retourne ADOPTED (nouveau checkpoint actif) ou FAILED (rien de
+        persisté). L'appelant doit s'en servir plutôt que de supposer qu'un
+        appel à retrain() a toujours produit un modèle utilisable.
         """
         months_now = self._count_months(device_df)
         _log.info("[%s] démarrage fine-tune — M%d", device_id, months_now)
@@ -115,22 +129,22 @@ class MonthlyRetrainer:
         ckpt_path     = self._ckpt_dir / ckpt_filename
 
         series_list = self._extract_series(device_df)
-        success     = self._fine_tune(pipeline, series_list, ckpt_path)
-        is_mature   = months_now >= MONTHS_TO_MATURITY
-
-        if not success:
+        if not self._fine_tune(pipeline, series_list, ckpt_path):
             _log.warning(
                 "[%s] fine-tuning échoué — état NON mis à jour. "
                 "Corrigez l'erreur puis supprimez retrain_state.json pour forcer un retry.",
                 device_id,
             )
-            return
+            return RetrainOutcome.FAILED
+
+        is_mature = months_now >= MONTHS_TO_MATURITY
 
         old_state = self._states.get(device_id)
         if old_state and old_state.checkpoint_filename:
             old_ckpt = self._ckpt_dir / old_state.checkpoint_filename
             if old_ckpt.exists() and old_ckpt.name != ckpt_filename:
                 old_ckpt.unlink(missing_ok=True)
+                old_ckpt.with_name(old_ckpt.stem + "_metrics.json").unlink(missing_ok=True)
                 _log.debug("[%s] ancien checkpoint supprimé : %s", device_id, old_ckpt.name)
 
         self._states[device_id] = DeviceRetrainState(
@@ -145,6 +159,8 @@ class MonthlyRetrainer:
             _log.info("[%s] M12 atteint — modèle mature, aucun retraining ultérieur", device_id)
         else:
             _log.info("[%s] checkpoint sauvegardé : %s", device_id, ckpt_path.name)
+
+        return RetrainOutcome.ADOPTED
 
     def load_checkpoint(self, device_id: str, pipeline: Any) -> bool:
         """

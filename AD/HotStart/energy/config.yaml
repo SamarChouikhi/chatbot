@@ -163,6 +163,7 @@ retraining:
   fichier_etat: "outputs/energy/retrain_state.json"
 
 
+
 # ── Prévision préventive ─────────────────────────────────────────────────────
 prevision:
 

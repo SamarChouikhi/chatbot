@@ -8,6 +8,7 @@ import { GazService, RtGmDto, GazSummaryDto, GazAlertDto } from '../services/gaz
 import { WaterService, RtWmDto, WaterSummaryDto, WaterAlertDto } from '../services/water.service';
 import { ElectricityService, RtEnPDto, ElecSummaryDto, ElecAlertDto } from '../services/electricity.service';
 import { FuelService, FuelLatestDto, FuelSummaryDto, FuelAlertDto } from '../services/fuel.service';
+import { normalizeBattery } from '../shared/battery.util';
 
 @Component({
   selector: 'app-device-detail',
@@ -64,6 +65,10 @@ export class DeviceDetailComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void { this.destroy$.next(); this.destroy$.complete(); }
 
+  // ══════════════════════════════════════════════════════════════
+  // CHARGEMENT
+  // ══════════════════════════════════════════════════════════════
+
   load(): void {
     this.isLoading = true;
     this.errorMsg  = '';
@@ -85,6 +90,10 @@ export class DeviceDetailComponent implements OnInit, OnDestroy {
       default: this.isLoading = false;
     }
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // CHARGEMENT PAR DOMAINE (gaz / eau / élec / carburant)
+  // ══════════════════════════════════════════════════════════════
 
   private loadGaz(id: number, from: Date, to: Date): void {
     forkJoin([this.gazSvc.getRealTime(id), this.gazSvc.getSummary(id, from, to), this.gazSvc.getAlerts()])
@@ -142,6 +151,10 @@ export class DeviceDetailComponent implements OnInit, OnDestroy {
       });
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // GETTERS AGRÉGÉS (toutes-domaines confondues)
+  // ══════════════════════════════════════════════════════════════
+
   get rtStatus(): string {
     return this.rtGaz?.status || this.rtWater?.status || this.rtElec?.status || this.fuelLatest?.status || '';
   }
@@ -155,7 +168,16 @@ export class DeviceDetailComponent implements OnInit, OnDestroy {
     return (this.rtElec.activePowerL1 ?? 0) + (this.rtElec.activePowerL2 ?? 0) + (this.rtElec.activePowerL3 ?? 0);
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // HELPERS TEMPLATE
+  // ══════════════════════════════════════════════════════════════
+
   goBack(): void { this.router.navigate(['/device']); }
+
+  /** Normalise le niveau batterie IoT (spec LoRaWAN 0–254, voir shared/battery.util.ts) */
+  normBatt(v: number | null | undefined): number {
+    return normalizeBattery(v);
+  }
 
   getTypeLabel(type: number | null): string {
     return type != null ? this.translate.instant(this.typeKeys[type] ?? String(type)) : '—';

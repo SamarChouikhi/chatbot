@@ -1,0 +1,72 @@
+@startuml Diagramme_Sequence_Chatbot_ARIA
+
+' =========================================================================
+'  ARIA - Diagramme de Sequence
+'  Cas d'utilisation : Interroger l'assistant conversationnel
+'  Rapport PFE - Version finale
+' =========================================================================
+
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam defaultFontName "Segoe UI"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.2
+skinparam sequenceMessageAlign center
+
+skinparam participant {
+    BackgroundColor #E8F0FE
+    BorderColor #4A78C4
+    FontStyle bold
+}
+
+skinparam database {
+    BackgroundColor #FFF3E0
+    BorderColor #E65100
+    FontStyle bold
+}
+
+skinparam actor {
+    BackgroundColor #ECEFF1
+    BorderColor #455A64
+}
+
+title <b>ARIA - Sequence : Interroger l'assistant conversationnel</b>
+
+actor "Utilisateur" as User
+participant "Interface Web\n(Angular)" as UI
+participant "API\n(FastAPI)" as API
+participant "Agent IA\n(AriaAgent)" as Agent
+participant "Serveur MCP\n(outils de donnees)" as MCP
+database "Base de\nDonnees" as DB
+participant "Modele de\nLangage (LLM)" as LLM
+
+User -> UI : saisit une question
+UI -> API : envoie la requete\n(POST /chat)
+API -> Agent : transmet la question
+
+alt question courante (salutation, aide)
+    Agent -> Agent : detecte une intention statique
+    Agent --> API : reponse immediate
+else question sur les donnees
+    Agent -> Agent : analyse la question\n(type, periode, capteur)
+    Agent -> MCP : appelle le ou les outils\nnecessaires
+    MCP -> DB : interroge les donnees
+    DB --> MCP : retourne les resultats
+    MCP --> Agent : retourne les donnees formatees
+    Agent -> LLM : demande la generation\nde la reponse
+    LLM --> Agent : retourne la reponse
+
+    Agent -> Agent : evalue la qualite\nde la reponse
+    opt qualite insuffisante
+        Agent -> LLM : relance la generation\n(une seule fois)
+        LLM --> Agent : retourne la reponse corrigee
+    end
+
+    Agent --> API : reponse validee
+end
+
+API --> UI : diffuse la reponse\n(flux progressif)
+UI --> User : affiche la reponse
+
+@enduml

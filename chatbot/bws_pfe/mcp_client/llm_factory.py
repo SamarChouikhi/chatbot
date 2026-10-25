@@ -204,7 +204,7 @@ class LLMFactory:
             
             'gemini'     : self._try_gemini,
             'openrouter' : self._try_openrouter,
-            'huggingface': self._try_huggingface,
+            'huggingface': self._try_huggingface_all,
             'cerebras'   : self._try_cerebras,
         }
 
@@ -227,7 +227,9 @@ class LLMFactory:
     def _collect_groq_models() -> List[str]:
         models = [os.getenv(f'GROQ_MODEL_{i}', '').strip() for i in range(1, 10)]
         models = [m for m in models if m]
-        return models or ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
+        # Défaut de secours si aucun GROQ_MODEL_N n'est configuré — modèles gratuits
+        # vérifiés actifs sur le catalogue Groq (les anciens llama-3.x ont été retirés).
+        return models or ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b']
 
     def _try_groq_all(self) -> Optional[Tuple]:
         if not _ping_groq():
@@ -388,12 +390,33 @@ class LLMFactory:
             logger.warning(f'Cerebras échec: {str(e)[:80]}')
             return None
 
-    def _try_huggingface(self) -> Optional[Tuple]:
+    @staticmethod
+    def _collect_huggingface_models() -> List[str]:
+        models = [os.getenv(f'HF_MODEL_{i}', '').strip() for i in range(1, 10)]
+        models = [m for m in models if m]
+        single = os.getenv('HF_MODEL', '').strip()
+        if single and single not in models:
+            models.append(single)
+        # Défaut de secours — modèles gratuits vérifiés actifs sur le nouveau routeur
+        # HF Inference Providers (router.huggingface.co), du plus capable au plus rapide.
+        return models or [
+            'meta-llama/Llama-3.3-70B-Instruct',
+            'deepseek-ai/DeepSeek-V3.1',
+            'meta-llama/Llama-3.1-8B-Instruct',
+        ]
+
+    def _try_huggingface_all(self) -> Optional[Tuple]:
         if not _ping_huggingface():
             logger.warning('[PING] HuggingFace injoignable')
             return None
-        hf_key   = self.key_manager.get_huggingface_key()
-        hf_model = os.getenv('HF_MODEL', 'Qwen/Qwen3-8B')
+        for model in self._collect_huggingface_models():
+            result = self._try_huggingface(model)
+            if result:
+                return result
+        return None
+
+    def _try_huggingface(self, hf_model: str) -> Optional[Tuple]:
+        hf_key = self.key_manager.get_huggingface_key()
         if not hf_key:
             return None
         try:
@@ -401,13 +424,21 @@ class LLMFactory:
             llm = ChatOpenAI(
                 model=hf_model,
                 api_key=hf_key,
-                base_url='https://api-inference.huggingface.co/v1',
+                # HF a retiré api-inference.huggingface.co — l'API OpenAI-compatible
+                # vit désormais sous router.huggingface.co (Inference Providers).
+                base_url='https://router.huggingface.co/v1',
                 temperature=0,
                 max_tokens=4096,
                 timeout=60,
                 max_retries=0,
-                # Désactive le mode "thinking" de Qwen3 (évite les blocs <think>…</think>)
-                model_kwargs={'chat_template_kwargs': {'enable_thinking': False}},
+                # Désactive le mode "thinking" de Qwen3 (évite les blocs <think>…</think>).
+                # NB: doit passer par extra_body, pas model_kwargs — langchain_openai (1.1.x)
+                # transmet model_kwargs comme kwargs littéraux à AsyncCompletions.create(),
+                # qui rejette tout nom non reconnu par sa signature (TypeError: unexpected
+                # keyword argument). extra_body est le mécanisme prévu par le SDK OpenAI pour
+                # les champs spécifiques à un provider (ignoré sans erreur par les modèles qui
+                # ne le supportent pas, ex. Kimi-K2, Llama, DeepSeek).
+                extra_body={'chat_template_kwargs': {'enable_thinking': False}},
             )
             logger.info(f'LLM: HuggingFace / {hf_model}')
             return (llm, hf_model, 'huggingface')
@@ -415,5 +446,5 @@ class LLMFactory:
             err = str(e).lower()
             if any(k in err for k in ['quota', 'rate', '429', 'limit', 'unauthorized', '401']):
                 self.key_manager.mark_huggingface_exhausted(hf_key)
-            logger.warning(f'HuggingFace échec: {str(e)[:80]}')
+            logger.warning(f'HuggingFace/{hf_model} échec: {str(e)[:80]}')
             return None

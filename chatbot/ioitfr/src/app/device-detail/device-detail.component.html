@@ -122,7 +122,7 @@
             </div>
             <div class="kpi-card kpi-blue">
               <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_BATTERY' | translate }}</span>
-              <span class="kpi-val">{{ rtGaz?.batteryLevel ?? '—' }}</span>
+              <span class="kpi-val">{{ rtGaz ? normBatt(rtGaz.batteryLevel) : '—' }}</span>
               <span class="kpi-unit">%</span>
             </div>
             <div class="kpi-card kpi-teal">
@@ -166,7 +166,7 @@
             </div>
             <div class="kpi-card kpi-blue">
               <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_BATTERY' | translate }}</span>
-              <span class="kpi-val">{{ rtWater?.batteryLevel ?? '—' }}</span>
+              <span class="kpi-val">{{ rtWater ? normBatt(rtWater.batteryLevel) : '—' }}</span>
               <span class="kpi-unit">%</span>
             </div>
             <div class="kpi-card kpi-blue">
@@ -225,7 +225,7 @@
             </div>
             <div class="kpi-card kpi-blue">
               <span class="kpi-label">{{ 'DEVICES_PAGE.KPI_BATTERY' | translate }}</span>
-              <span class="kpi-val">{{ rtElec?.batteryLevel ?? '—' }}</span>
+              <span class="kpi-val">{{ rtElec ? normBatt(rtElec.batteryLevel) : '—' }}</span>
               <span class="kpi-unit">%</span>
             </div>
             <div class="kpi-card kpi-blue">

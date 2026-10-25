@@ -68,6 +68,19 @@ python ColdStart/main.py --domain energy --device NEW_DEVICE_002 --phases L1 L2 
 python ColdStart/main.py --domain water
 ```
 
+### Monthly Chronos fine-tuning
+
+`AD/HotStart/common/monthly_retrainer.py` (invoked via `--retrain`/`--retrain-only`) fine-tunes Chronos per device once per new month of data, up to M12 (then the device is marked mature and never retrained) — wired for `energy` and `water` only (`gaz`/`fuel` configs have no `retraining:` block). Each device is fine-tuned from the base weights (restored between devices in `retrain_job.py`); the new checkpoint is adopted unconditionally and the per-device state is persisted in `retrain_state.json`. Not scheduled: run it manually.
+
+### ColdStart Calibration Check
+```bash
+cd AD
+python eval/coldstart_calibration.py --population-dir /path/to/population/csvs
+python eval/coldstart_calibration.py --domains fuel gaz --seeds 5
+python eval/coldstart_calibration.py --min-precision 0.85 --min-recall 0.60
+```
+Runs the real production pipeline (`ColdStart/main.py --synthetic-only`, via subprocess like `ad_runner.py`) per domain and cross-references each run's injected-anomaly ground truth (`is_injected_anomaly` column) against detected anomalies to compute precision/recall/F1, averaged over seeds. Use after changing a threshold, algorithm, or the synthetic generator to catch calibration regressions. Requires a real population CSV per domain (not included in the repo, passed via `--population-dir`/`--population-map`) to seed realistic synthetic stats. `ColdStart/main.py --seed N` overrides `synthese.graine` for reproducible synthetic runs and exists mainly to support this script.
+
 ### Python Tests
 ```bash
 cd chatbot/bws_pfe
@@ -135,7 +148,7 @@ Copy `.env.example` → `.env` in `chatbot/bws_pfe/`. Key variables:
 | `OLLAMA_TIMEOUT` | `300` | |
 | `HF_API_KEY_1` … | — | HuggingFace keys |
 | `HF_MODEL` | `Qwen/Qwen3-8B` | HuggingFace model |
-| `VISION_API_KEY_1`, `VISION_MODEL` | — / `meta-llama/llama-4-scout-17b-16e-instruct` | Image analysis (multimodal Groq) |
+| `VISION_API_KEY_1`, `VISION_MODEL` | — / `qwen/qwen3.6-27b` | Image analysis (multimodal Groq; falls back to `GROQ_API_KEY_N` pool if unset) |
 | `ASSEMBLYAI_API_KEY` | — | Voice transcription |
 | `CORS_ORIGINS` | `*` | FastAPI CORS; set to exact origin URLs in production |
 | `LOG_LEVEL` | `INFO` | |
@@ -219,7 +232,7 @@ Keys: chatbot/backbws/src/main/resources/META-INF/resources/{public,private}Key.
 - `chatbot/bws_pfe/mcp_client/history.py` — `MySQLHistoryManager`: auto-creates `chat_threads`/`chat_messages` on startup; falls back to in-memory list if MySQL unreachable
 - `chatbot/bws_pfe/api/routes/` — 10 route modules: `chat` (POST /chat + GET /chat/stream SSE + GET /download/{file_id}), `threads` (conversation history), `feedback` (thumbs up/down), `reports` (daily summaries), `system` (health/status), `employees` (user module permissions), `analytics` (usage stats), `proactive` (push notifications), `sessions`, `recommendations`
 - `chatbot/bws_pfe/api/pipeline/scheduler.py` — four APScheduler jobs (replay @01:00, daily pipeline @03:00, proactive check @/2h, recommendations @04:00)
-- `chatbot/bws_pfe/api/pipeline/proactive.py` — proactive analysis logic: queries `ad_results` and `aria_predictions` for new anomalies/high predictions per active user; template-based messages (no LLM), 4h per-(user, domain) cooldown
+- `chatbot/bws_pfe/api/pipeline/proactive.py` — proactive analysis logic: queries `ad_results` and `aria_predictions` for new anomalies/high predictions per active user; template-based messages (no LLM), 24h per-(user, domain) cooldown (1 notification/day max, survives dismissal)
 - `chatbot/bws_pfe/api/pipeline/proactive_broadcaster.py` — in-memory SSE broadcaster; one `asyncio.Queue` per open SSE connection; `broadcast(user_id, payload)` fans out to all tabs for that user
 - `chatbot/bws_pfe/api/models.py` — Pydantic request/response models; `AVAILABLE_MODULES` list defines the valid values for `allowed_modules`
 - `chatbot/bws_pfe/mcp_server/device_resolver.py` — resolves `id_device` → `{nom, espace}` via JOIN on `device`/`espace` tables; 5-minute in-process cache; used by all domain tool modules
@@ -227,6 +240,7 @@ Keys: chatbot/backbws/src/main/resources/META-INF/resources/{public,private}Key.
 - `chatbot/bws_pfe/mcp_server/tools/` — 9 modules: `database.py` (list/describe/execute/count/search/summary), `sensors.py` (realtime_data + thl/wm/en/gm/fuel analysis), `alerts.py`, `anomaly.py`, `predictions.py`, `ad_analysis.py`, `reco_tool.py` (see below), `utils.py`; shared constants live in `_helpers.py` (`PERIOD_MAP`, `THRESHOLDS`, `SENSOR_TABLE_PRIORITY`)
 - `chatbot/bws_pfe/eval/` — evaluation framework: `cases.py` (EvalCase definitions), `runner.py` (runs cases against live agent), `metrics.py`, `report.py`
 - `chatbot/bws_pfe/api/pipeline/recommendation_engine.py` — LLM-powered recommendation pipeline: `compute_baselines()` (P10/P50/P90 per device/hour_of_week), signal detection, Chronos score enrichment, anti-fatigue suppression (dismissed ≥ 2× in 7d), cross-domain anomaly correlation, ROI measurement 48h post-acceptance; falls back to rule-based if LLM unavailable; writes to `aria_recommendations`
+- `chatbot/bws_pfe/api/pipeline/reco/` — the engine's stages, one module each: `config` (DOMAIN_CONFIG, device labels), `baselines`, `signals`, `context` (anti-fatigue, device context, cross-domain), `llm` (prompt, call, validation, EN/AR translation), `fallback` (rule-based FR/EN/AR), `storage`, `roi`; `recommendation_engine.py` only orchestrates and re-exports the public API (`run_recommendation_cycle`, `generate_domain`, `compute_baselines`, `measure_roi`, `DOMAIN_CONFIG`)
 - `chatbot/bws_pfe/mcp_server/tools/reco_tool.py` — MCP tool `get_recommendations`: reads `aria_recommendations` filtered by domain/status, returns ranked list with estimated savings in TND
 - `chatbot/bws_pfe/api/routes/recommendations.py` — REST routes: `GET /recommendations` (filtered by role/domain/modules), `PATCH /recommendations/{id}` (status update), `POST /recommendations/refresh` (manual trigger), `GET /recommendations/summary`
 - `chatbot/bws_pfe/rag/retriever.py` — MySQL FULLTEXT retrieval (with LIKE fallback) for building LLM context in `recommendation_engine.py`; reads `aria_knowledge_base` table; categories: `equipment_spec`, `maintenance_procedure`, `anomaly_playbook`, `intervention_report`, `contract_info`
@@ -235,6 +249,8 @@ Keys: chatbot/backbws/src/main/resources/META-INF/resources/{public,private}Key.
 - `chatbot/bws_pfe/api/pipeline/aggregator.py` — aggregates raw sensor readings from source tables into `daily_*` (hourly buckets) for each domain
 - `chatbot/bws_pfe/api/pipeline/extractor.py` — pulls last N hours of raw data from source tables (`archive_en_p`, `archive_wm`, etc.) for the daily pipeline
 - `chatbot/bws_pfe/api/pipeline/ad_runner.py` — bridges the daily pipeline to the `AD/` subprocess: triggers HotStart detection per domain and writes results to `ad_results`
+- `chatbot/bws_pfe/api/pipeline/data_quality.py` — plausibility filter applied in `aggregate_energy`: a reading > `SPIKE_FACTOR` (20) × the median of its (device, phase) series is dropped (some LoRa meters occasionally report their cumulative index ~1e8 instead of the interval consumption ~1e5)
+- `chatbot/bws_pfe/api/pipeline/clean_energy_spikes.py` — one-off cleanup of spikes already in `daily_energy` (`python -m api.pipeline.clean_energy_spikes` = dry-run, `--apply` backs up to `daily_energy_spikes_backup` then sets `cons_en = NULL`, `--restore` reverts)
 - `chatbot/bws_pfe/api/pipeline/csv_importer.py` — flexible CSV → `daily_*` importer used by the `/system/import-csv` route; resolves column aliases (`_COL_ALIASES`), normalises wide→long energy format (L1/L2/L3 columns), and delegates aggregation to the same pipeline functions as the daily job
 
 > `chatbot/bws_pfe/mcp_client/aria_agent.py` is **deprecated** — it re-exports `AriaAgent` from `agent.py` only for backward compatibility.
@@ -244,12 +260,13 @@ Keys: chatbot/backbws/src/main/resources/META-INF/resources/{public,private}Key.
 - `chatbot/backbws/src/main/resources/seed_data.sql` — initial data; run manually after schema creation
 - `chatbot/data_seed.sql` — broader seed SQL at repo root (device/espace/archive data); run once on fresh DB
 - `chatbot/backbws/src/main/java/org/example/resource/` — 14 REST resources: Auth, Device, KPI, Electricity, Water, Gaz, Fuel, Alerts, AlertSseBroadcaster (SSE push), Chat, Recovery, Role, User
-- `chatbot/backbws/src/main/java/org/example/service/` — 14 service classes (one per resource domain)
+- `chatbot/backbws/src/main/java/org/example/service/` — 15 service classes (mostly one per resource domain, plus `JwtService`, `TwilioService`, `WaterArchiveJob`)
 - `chatbot/backbws/src/main/java/org/example/dto/` — request/response DTOs; `entity/` — JPA entities; `util/` — JWT helpers
 - Twilio SDK is included for SMS alert notifications (see Alerts service)
 
 ### Angular
 - `chatbot/ioitfr/src/app/services/` — 22+ service files (aria, auth, analytics, domain-specific)
+- `chatbot/ioitfr/src/app/shared/domain-dashboard.base.ts` — abstract base of the 4 domain dashboards (`electricity`, `gaz`, `water`, `fuel`): lifecycle, period loading, i18n refresh, KPI panel (`KpiDef`), chart modal, Chart.js instance registry (`renderChart(key, …)` destroys the previous instance); subclasses only implement `fetchData`/`buildKpi`/`buildCharts`/`buildModalChart`/`insightPrompts`. Chart.js controllers are registered once in `shared/chart-setup.ts`
 - `chatbot/ioitfr/src/app/chatbot/` — chat UI with streaming, markdown, quick replies
 - `chatbot/ioitfr/src/app/core/guards/` — `auth.guard.ts`, `role.guard.ts`
 - `chatbot/ioitfr/src/app/core/interceptors/auth.interceptor.ts` — attaches JWT to every request
@@ -328,6 +345,8 @@ Keys: chatbot/backbws/src/main/resources/META-INF/resources/{public,private}Key.
 
 - **ReAct recursion limit**: `_REACT_RECURSION_LIMIT = 16` steps (1 tool call = 2 steps: AI + Tool), allowing up to 7 tool calls per turn. The FULL REPORT chain uses up to 9 tools — it stays within limit because some are batched in a single LLM step. Raising this value risks infinite loops.
 
+- **Recommendation plausibility gate**: `recommendation_engine._flag_implausible_savings()` drops any `estimated_saving_tnd` above `_MAX_PLAUSIBLE_SAVING_TND` (50 000 TND/month per device — a symptom of a mis-declared meter unit, e.g. Wh or L reported as kWh or m³). The recommendation is kept with its relative deviation, but no amount or volume is written (LLM prompt + fallback texts), and the final value is forced to NULL even if the LLM computes one.
+- **Few-shot IDs are fictitious**: the examples in `prompt.py` use `EXEMPLE-*` identifiers on purpose; `output_guard.py` treats `exemple-` in an answer as a hallucination (copied example). Never put real device IDs or realistic values in the few-shot block.
 - **Energy phases**: energy domain has L1/L2/L3 phase granularity; all other domains are single-value per hour.
 - **Idempotent pipeline**: `INSERT ON DUPLICATE KEY UPDATE` — safe to re-run for a given date.
 - **CORS**: Java backend is hardcoded to `http://localhost:4200` — change `application.properties` for production. FastAPI CORS is controlled by `CORS_ORIGINS` env var.
